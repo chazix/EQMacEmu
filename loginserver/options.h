@@ -30,6 +30,8 @@ public:
 	*/
 	Options() :
 		allow_unregistered(true),
+		trace(false),
+		world_trace(false),
 		dump_in_packets(false),
 		dump_out_packets(false),
 		encryption_mode(5),
@@ -49,6 +51,26 @@ public:
 	* Returns the value of allow_unregistered.
 	*/
 	inline bool IsUnregisteredAllowed() const { return allow_unregistered; }
+
+	/**
+	* Sets trace.
+	*/
+	inline void Trace(bool b) { trace = b; }
+
+	/**
+	* Returns the value of trace.
+	*/
+	inline bool IsTraceOn() const { return trace; }
+
+	/**
+	* Sets trace.
+	*/
+	inline void WorldTrace(bool b) { world_trace = b; }
+
+	/**
+	* Returns the value of trace.
+	*/
+	inline bool IsWorldTraceOn() const { return world_trace; }
 
 	/**
 	* Sets dump_in_packets.
@@ -169,14 +191,30 @@ public:
 	inline void AutoCreateAccounts(bool b) { auto_create_accounts = b; }
 	inline bool CanAutoCreateAccounts() const { return auto_create_accounts; }
 
+	inline void AutoLinkAccounts(bool b) { auto_link_accounts = b; }
+	inline bool CanAutoLinkAccounts() const { return auto_link_accounts; }
+
+	inline void EQEmuLoginServerAddress(std::string v) { eqemu_loginserver_address = v; }
+	inline std::string GetEQEmuLoginServerAddress() const { return eqemu_loginserver_address; }
+
+	inline void DefaultLoginServerName(std::string v) { default_loginserver_name = v; }
+	inline std::string GetDefaultLoginServerName() const { return default_loginserver_name; }
+
+	inline void UpdateInsecurePasswords(bool b) { update_insecure_passwords = b; }
+	inline bool IsUpdatingInsecurePasswords() const { return update_insecure_passwords; }
+
 private:
 	bool allow_unregistered;
+	bool trace;
+	bool world_trace;
 	bool dump_in_packets;
 	bool dump_out_packets;
 	bool reject_duplicate_servers;
 	bool allow_token_login;
 	bool allow_password_login;
 	bool auto_create_accounts;
+	bool auto_link_accounts;
+	bool update_insecure_passwords;
 	int encryption_mode;
 	std::string local_network;
 	std::string network_ip;
@@ -185,6 +223,8 @@ private:
 	std::string world_admin_registration_table;
 	std::string world_server_type_table;
 	std::string loginserver_setting_table;
+	std::string eqemu_loginserver_address;
+	std::string default_loginserver_name;
 };
 
 #endif
