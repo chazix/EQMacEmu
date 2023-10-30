@@ -191,18 +191,6 @@ public:
 	inline void AutoCreateAccounts(bool b) { auto_create_accounts = b; }
 	inline bool CanAutoCreateAccounts() const { return auto_create_accounts; }
 
-	inline void AutoLinkAccounts(bool b) { auto_link_accounts = b; }
-	inline bool CanAutoLinkAccounts() const { return auto_link_accounts; }
-
-	inline void EQEmuLoginServerAddress(std::string v) { eqemu_loginserver_address = v; }
-	inline std::string GetEQEmuLoginServerAddress() const { return eqemu_loginserver_address; }
-
-	inline void DefaultLoginServerName(std::string v) { default_loginserver_name = v; }
-	inline std::string GetDefaultLoginServerName() const { return default_loginserver_name; }
-
-	inline void UpdateInsecurePasswords(bool b) { update_insecure_passwords = b; }
-	inline bool IsUpdatingInsecurePasswords() const { return update_insecure_passwords; }
-
 private:
 	bool allow_unregistered;
 	bool trace;
@@ -213,8 +201,6 @@ private:
 	bool allow_token_login;
 	bool allow_password_login;
 	bool auto_create_accounts;
-	bool auto_link_accounts;
-	bool update_insecure_passwords;
 	int encryption_mode;
 	std::string local_network;
 	std::string network_ip;
@@ -223,8 +209,6 @@ private:
 	std::string world_admin_registration_table;
 	std::string world_server_type_table;
 	std::string loginserver_setting_table;
-	std::string eqemu_loginserver_address;
-	std::string default_loginserver_name;
 };
 
 #endif
