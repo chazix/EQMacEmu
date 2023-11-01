@@ -44,10 +44,10 @@
     },
     "schema": {
       "access_log_table": "tblaccountaccesslog",
-      "account_table": "tblLoginServerAccounts",
-      "world_registration_table": "tblWorldServerRegistration",
-      "world_admin_registration_table": "tblServerAdminRegistration",
-      "world_server_type_table": "tblServerListType",
+      "account_table": "tblloginserveraccounts",
+      "world_registration_table": "tblworldserverregistration",
+      "world_admin_registration_table": "tblserveradminregistration",
+      "world_server_type_table": "tblserverlisttype",
       "loginserver_setting_table": "tblloginserversettings"
     }
   }
