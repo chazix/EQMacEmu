@@ -1,5 +1,5 @@
-DROP TABLE IF EXISTS tblLoginServerAccounts;
-CREATE TABLE IF NOT EXISTS tblLoginServerAccounts (
+DROP TABLE IF EXISTS tblloginserveraccounts;
+CREATE TABLE IF NOT EXISTS tblloginserveraccounts (
   LoginServerID integer unsigned NOT NULL auto_increment,
   AccountName varchar(30) NOT NULL,
   AccountPassword varchar(50) NOT NULL,
@@ -10,19 +10,19 @@ CREATE TABLE IF NOT EXISTS tblLoginServerAccounts (
   PRIMARY KEY (LoginServerID, AccountName)
 ) ENGINE=InnoDB;
 
-DROP TABLE IF EXISTS tblServerListType;
-CREATE TABLE IF NOT EXISTS tblServerListType (
+DROP TABLE IF EXISTS tblserverlisttype;
+CREATE TABLE IF NOT EXISTS tblserverlisttype (
 	ServerListTypeID integer unsigned NOT NULL,
 	ServerListTypeDescription varchar(20) NOT NULL,
 	PRIMARY KEY (ServerListTypeID)
 ) ENGINE=MyISAM;
 
-INSERT INTO tblServerListType (ServerListTypeID, ServerListTypeDescription) VALUES (1, 'Legends');
-INSERT INTO tblServerListType (ServerListTypeID, ServerListTypeDescription) VALUES (2, 'Preferred');
-INSERT INTO tblServerListType (ServerListTypeID, ServerListTypeDescription) VALUES (3, 'Standard');
+INSERT INTO tblserverlisttype (ServerListTypeID, ServerListTypeDescription) VALUES (1, 'Legends');
+INSERT INTO tblserverlisttype (ServerListTypeID, ServerListTypeDescription) VALUES (2, 'Preferred');
+INSERT INTO tblserverlisttype (ServerListTypeID, ServerListTypeDescription) VALUES (3, 'Standard');
 
-DROP TABLE IF EXISTS tblServerAdminRegistration;
-CREATE TABLE IF NOT EXISTS tblServerAdminRegistration (
+DROP TABLE IF EXISTS tblserveradminregistration;
+CREATE TABLE IF NOT EXISTS tblserveradminregistration (
 	ServerAdminID integer unsigned NOT NULL auto_increment,
 	AccountName varchar(30) NOT NULL,
 	AccountPassword varchar(30) NOT NULL,
@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS tblServerAdminRegistration (
 	PRIMARY KEY (ServerAdminID, Email)
 ) ENGINE=MyISAM;
 
-DROP TABLE IF EXISTS tblWorldServerRegistration;
-CREATE TABLE IF NOT EXISTS tblWorldServerRegistration (
+DROP TABLE IF EXISTS tblworldserverregistration;
+CREATE TABLE IF NOT EXISTS tblworldserverregistration (
   ServerID integer unsigned NOT NULL auto_increment,
   ServerLongName varchar(100) NOT NULL,
   ServerTagDescription varchar(50) NOT NULL DEFAULT '',
