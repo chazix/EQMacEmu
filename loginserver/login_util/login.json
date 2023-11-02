@@ -38,7 +38,7 @@
       "network_ip": "127.0.0.1",
       "salt": "randomstring"
     },
-    "old": {
+    "Old": {
       "port": 6000,
       "opcodes": "login_opcodes_oldver.conf"
     },
