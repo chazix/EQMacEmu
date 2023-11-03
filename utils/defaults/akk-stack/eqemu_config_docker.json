@@ -58,7 +58,8 @@
     },
     "directories": {
       "patches": "assets/patches/",
-      "opcodes": "assets/opcodes/"
+      "opcodes": "assets/opcodes/",
+      "maps": "maps/"
     }
   },
   "web-admin": {
