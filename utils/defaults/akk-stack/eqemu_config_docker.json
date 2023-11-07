@@ -69,7 +69,7 @@
       "runQueryServ": false,
       "isRunning": true,
       "minZoneProcesses": 10,
-      "staticZones": "butcher,erudnext,freporte,qeynos,freeporte,oot,iceclad,nro,oasis,nedaria,abysmal,natimbi,timorous,abysmal,firiona,overthere"
+      "staticZones": ""
     },
     "quests": {
       "hotReload": true
