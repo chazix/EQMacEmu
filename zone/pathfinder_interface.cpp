@@ -9,12 +9,19 @@
 
 IPathfinder *IPathfinder::Load(const std::string &zone) {
 	struct stat statbuffer;
-	std::string navmesh_path = StringFormat("Maps/%s.nav", zone.c_str());
+
+	// this always defaults to: "Maps/" if not specified in the config file
+	std::string maps_dir = Config->MapDir;
+	if (maps_dir[maps_dir.length() - 1] != '/') {
+		maps_dir += "/";
+	}
+
+	std::string navmesh_path = StringFormat("%s%s.nav", maps_dir, zone.c_str());
 	if (stat(navmesh_path.c_str(), &statbuffer) == 0) {
 		return new PathfinderNavmesh(navmesh_path);
 	}
 
-	std::string old_navmesh_path = StringFormat("Maps/%s.path", zone.c_str());
+	std::string old_navmesh_path = StringFormat("%s%s.path", maps_dir, zone.c_str());
 	if (stat(old_navmesh_path.c_str(), &statbuffer) == 0) {
 		return new PathfinderWaypoint(old_navmesh_path);
 	}
