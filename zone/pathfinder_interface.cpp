@@ -9,8 +9,6 @@
 #include <sys/stat.h>
 
 IPathfinder *IPathfinder::Load(const std::string &zone) {
-	struct stat statbuffer;
-
 	std::string maps_dir;
 	if (FileUtil::exists("maps")) {
 		maps_dir = "maps/";
@@ -27,13 +25,13 @@ IPathfinder *IPathfinder::Load(const std::string &zone) {
 		}
 	}
 
-	std::string navmesh_path = StringFormat("%s%s.nav", maps_dir, zone.c_str());
-	if (stat(navmesh_path.c_str(), &statbuffer) == 0) {
+	std::string navmesh_path = StringFormat("%s%s.nav", maps_dir.c_str(), zone.c_str());
+	if (FileUtil::exists(navmesh_path)) {
 		return new PathfinderNavmesh(navmesh_path);
 	}
 
-	std::string old_navmesh_path = StringFormat("%s%s.path", maps_dir, zone.c_str());
-	if (stat(old_navmesh_path.c_str(), &statbuffer) == 0) {
+	std::string old_navmesh_path = StringFormat("%s%s.path", maps_dir.c_str(), zone.c_str());
+	if (FileUtil::exists(old_navmesh_path)) {
 		return new PathfinderWaypoint(old_navmesh_path);
 	}
 	
