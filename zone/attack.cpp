@@ -1352,11 +1352,11 @@ bool Client::Death(Mob* killerMob, int32 damage, uint16 spell, EQ::skills::Skill
 
 			if (killerMob)
 			{
-				worldserver.SendEmoteMessage(0, 0, 15, "[%s] %s has died to %s! They were level %i.", rulesets, GetCleanName(), killerMob->GetCleanName(), GetLevel());
+				worldserver.SendEmoteMessage(0, 0, 15, "[%s] %s has died to %s! They were level %i.", rulesets.c_str(), GetCleanName(), killerMob->GetCleanName(), GetLevel());
 			}
 			else
 			{
-				worldserver.SendEmoteMessage(0, 0, 15, "[%s] %s has died! They were level %i.", rulesets, GetCleanName(), GetLevel());
+				worldserver.SendEmoteMessage(0, 0, 15, "[%s] %s has died! They were level %i.", rulesets.c_str(), GetCleanName(), GetLevel());
 			}
 		}
 	}
@@ -2037,6 +2037,24 @@ bool NPC::Death(Mob* killerMob, int32 damage, uint16 spell, EQ::skills::SkillTyp
 	else
 	{
 		Log(Logs::Moderate, Logs::Death, "killer is %s. No XP will be given.", killer ? "a NPC" : "null");
+	}
+
+	if (IsNPC() && HasEngageNotice() && killer && killer->IsClient() && zone)
+	{
+		Client* killerClient = killer->CastToClient();
+		std::string guild_string = killerClient->GetGuildName();
+		if (!guild_string.empty())
+		{
+			std::string kill_message = killerClient->GetCleanName();
+			kill_message += " of <";
+			kill_message += guild_string.c_str();
+			kill_message += "> has killed ";
+			kill_message += GetCleanName();
+			kill_message += " in ";
+			kill_message += zone->GetLongName();
+			kill_message += "!";
+			worldserver.SendChannelMessage("Druzzil", ChatChannel_Broadcast, 0, 0, 100, kill_message.c_str());
+		}
 	}
 
 	if (skip_corpse_checks || GetSummonerID() || (killer && (killer->IsClient() || killer->IsPlayerOwned())))

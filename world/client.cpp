@@ -671,7 +671,7 @@ bool Client::HandleDeleteCharacterPacket(const EQApplicationPacket *app) {
 	uint32 is_hardcore = database.GetHardcoreStatus((char*)app->pBuffer);
 	if(char_acct_id == GetAccountID()) {
 		Log(Logs::Detail, Logs::WorldServer,"Delete character: %s",app->pBuffer);
-		if(level >= 30)
+		if(level >= 10)
 		{
 			database.MarkCharacterDeleted((char *)app->pBuffer);
 		}
@@ -719,13 +719,8 @@ bool Client::HandleChecksumPacket(const EQApplicationPacket *app)
 	std::string prev_custom_checksum_val = "";
 	database.GetVariable(prev_custom_checksum_name, prev_custom_checksum_val);
 
-	std::string custom_spells_checksum_name = "CustomSpellsChecksum";
-	std::string custom_spells_checksum_val = "";
-	database.GetVariable(custom_spells_checksum_name, custom_spells_checksum_val);
-
 	int64 custom_checksum_ll = atoll(custom_checksum_val.c_str());
 	int64 prev_custom_checksum_ll = atoll(prev_custom_checksum_val.c_str());
-	int64 custom_spells_checksum_ll = atoll(custom_spells_checksum_val.c_str());
 
 	if(GetClientVersionBit() == EQ::versions::ClientVersionBit::bit_MacPC)
 	{
@@ -738,10 +733,6 @@ bool Client::HandleChecksumPacket(const EQApplicationPacket *app)
 		else if(checksum == 8148329455921329)
 		{
 			Log(Logs::Detail, Logs::WorldServer, "Updated Spell Checksum is GOOD!");
-		}
-		else if (checksum == custom_spells_checksum_ll)
-		{
-			Log(Logs::Detail, Logs::WorldServer, "Custom Spells Checksum is GOOD!");
 		}
 		else if (checksum == custom_checksum_ll)
 		{

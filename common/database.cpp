@@ -1245,79 +1245,93 @@ uint8 Database::GetZoneRandomLoc(uint32 zoneID) {
 	return atoi(row[0]);
 }
 
-bool Database::CheckNameFilter(const char* name, bool surname)
-{
+bool Database::CheckNameFilter(const char* name, bool surname) {
+	// Rule 1: Name length constraints.
+	//         - If surname: at least 3 characters and must not start with a '`'.
+	//         - Otherwise: between 4 and 15 characters (inclusive).
+	// Rule 2: For surnames only: One '`' character is allowed but not more.
+	//         Otherwise, only alphabet characters are allowed in the name.
+	// Rule 3: No more than two consecutive repeating characters are allowed.
+	// Rule 4: Name must not match any restricted names in the database (case-insensitive).
+
 	std::string str_name = name;
 
-	if(surname)
-	{
-		if(!name || strlen(name) < 3)
-		{
+	// Rule 1: Check the length constraints.
+	if (surname) {
+		if (!name || strlen(name) < 3) {
 			return false;
 		}
 	}
-	else
-	{
-		// the minimum 4 is enforced by the client
-		if(!name || strlen(name) < 4 || strlen(name) > 15)
-		{
-			return false;
-		}
-	}
-
-	for (size_t i = 0; i < str_name.size(); i++)
-	{
-		if(!isalpha(str_name[i]))
-		{
+	else {
+		// The minimum 4 is enforced by the client.
+		if (!name || strlen(name) < 4 || strlen(name) > 15) {
 			return false;
 		}
 	}
 
-	for(size_t x = 0; x < str_name.size(); ++x)
-	{
+	// Ensure a surname doesn't start with a backtick.
+	if (surname && !str_name.empty() && str_name[0] == '`') {
+		return false;
+	}
+
+	// Rule 2: Check for allowed characters and optional backtick for surnames.
+	bool special_char_found = false;
+	for (size_t i = 0; i < str_name.size(); i++) {
+		if (str_name[i] == '`' || str_name[i] == '\'') {
+			// For non-surnames, if special char already found, or if it's at the start/end of the string.
+			if (!surname || special_char_found || i == 0 || i == str_name.size() - 1) {
+				return false;
+			}
+			special_char_found = true;
+		}
+		else if (!isalpha(str_name[i])) {
+			return false;
+		}
+	}
+
+	// Convert the entire name to lowercase for further checks.
+	for (size_t x = 0; x < str_name.size(); ++x) {
 		str_name[x] = tolower(str_name[x]);
 	}
 
+	// Rule 3: Check for consecutive repeating characters.
 	char c = '\0';
 	uint8 num_c = 0;
-	for(size_t x = 0; x < str_name.size(); ++x)
-	{
-		if(str_name[x] == c)
-		{
+	for (size_t x = 0; x < str_name.size(); ++x) {
+		if (str_name[x] == c) {
 			num_c++;
 		}
-		else
-		{
+		else {
 			num_c = 1;
 			c = str_name[x];
 		}
-		if(num_c > 2)
-		{
+		if (num_c > 2) {
 			return false;
 		}
 	}
 
-	
+	// Rule 4: Check against restricted names in the database.
 	std::string query("SELECT name FROM name_filter");
 	auto results = QueryDatabase(query);
 
+	// If the database query fails, default to true (based on original behavior).
 	if (!results.Success())
 	{
-		// false through to true? shouldn't it be falls through to false?
 		return true;
 	}
 
-	for (auto row = results.begin();row != results.end();++row)
+	// Compare each restricted name from the database to the input name.
+	for (auto row = results.begin(); row != results.end(); ++row)
 	{
 		std::string current_row = row[0];
-
-		for(size_t x = 0; x < current_row.size(); ++x)
+		for (size_t x = 0; x < current_row.size(); ++x)
 			current_row[x] = tolower(current_row[x]);
 
-		if(str_name.find(current_row) != std::string::npos)
+		if (str_name.find(current_row) != std::string::npos)
 			return false;
 	}
 
+	// If the name has passed all the checks, return true.
 	return true;
 }
 
@@ -2261,22 +2275,25 @@ bool Database::LoadNextQuakeTime(ServerEarthquakeImminent_Struct& earthquake_str
 	earthquake_struct.quake_type = (QuakeType)atoi(row[2]);
 
 	//Force-Prep the next quake update in 15 minutes, if we are recovering from a server downtime during a quake. Ideally this would never happen but patch days do happen.
-	if (Timer::GetTimeSeconds() < earthquake_struct.start_timestamp + RuleI(Quarm, QuakeEndTimeDuration))
+	if (RuleB(Quarm, EnableQuakeDowntimeRecovery))
 	{
-		Log(Logs::Detail, Logs::WorldServer, "Recovering-from-downtime within 24 hour window. Using default rules values and a random ruleset...");
-		QuakeType ruleset = (QuakeType)(random.Int(QuakeType::QuakeDisabled+1, QuakeType::QuakeMax-1));
-		uint32 random_timestamp = random.Int(RuleI(Quarm, QuakeMinVariance), RuleI(Quarm, QuakeMaxVariance));
-		earthquake_struct.start_timestamp = Timer::GetTimeSeconds() + RuleI(Quarm, QuakeRepopDelay);
-		earthquake_struct.quake_type = ruleset;
-		earthquake_struct.next_start_timestamp = earthquake_struct.start_timestamp + random_timestamp;
+		if (Timer::GetTimeSeconds() < earthquake_struct.start_timestamp + RuleI(Quarm, QuakeEndTimeDuration))
+		{
+			Log(Logs::Detail, Logs::WorldServer, "Recovering-from-downtime within 24 hour window. Using default rules values and a random ruleset...");
+			QuakeType ruleset = (QuakeType)(random.Int(QuakeType::QuakeDisabled + 1, QuakeType::QuakeMax - 1));
+			uint32 random_timestamp = random.Int(RuleI(Quarm, QuakeMinVariance), RuleI(Quarm, QuakeMaxVariance));
+			earthquake_struct.start_timestamp = Timer::GetTimeSeconds() + RuleI(Quarm, QuakeRepopDelay);
+			earthquake_struct.quake_type = ruleset;
+			earthquake_struct.next_start_timestamp = earthquake_struct.start_timestamp + random_timestamp;
 
 
-		std::string query1 = StringFormat("DELETE FROM quake_data");
-		auto results1 = QueryDatabase(query1);
+			std::string query1 = StringFormat("DELETE FROM quake_data");
+			auto results1 = QueryDatabase(query1);
 
-		std::string query2 = StringFormat("REPLACE INTO quake_data (start_timestamp, next_timestamp, ruleset) VALUES (%i, %i, %i)", earthquake_struct.start_timestamp, earthquake_struct.next_start_timestamp, earthquake_struct.quake_type);
-		auto results2 = QueryDatabase(query2);
-		return false;
+			std::string query2 = StringFormat("REPLACE INTO quake_data (start_timestamp, next_timestamp, ruleset) VALUES (%i, %i, %i)", earthquake_struct.start_timestamp, earthquake_struct.next_start_timestamp, earthquake_struct.quake_type);
+			auto results2 = QueryDatabase(query2);
+			return false;
+		}
 	}
 
 	//Don't act on this data. Keep timer as-is.
