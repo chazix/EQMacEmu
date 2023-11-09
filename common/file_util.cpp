@@ -18,7 +18,6 @@
  *
 */
 
-#include "file_util.h"
 
 #include <string>
 #include <sys/stat.h>
@@ -26,6 +25,8 @@
 #ifdef _WINDOWS
 #include <direct.h>
 #endif
+
+#include "file_util.h"
 
 /**
  * @param name
