@@ -27,16 +27,20 @@ WaterMap* WaterMap::LoadWaterMapfile(std::string zone_name) {
 
 	std::string filename;
 	if (file_exists("maps")) {
-		filename = "maps";
+		filename = "maps/";
 	}
 	else if (file_exists("Maps")) {
-		filename = "Maps";
+		filename = "Maps/";
 	}
 	else {
 		filename = Config->MapDir;
+		const auto& dir_len = filename.length();
+		if (dir_len > 0 && filename[dir_len - 1] != '/') {
+			filename += "/";
+		}
 	}
 
-	std::string file_path = filename + "/" + zone_name + std::string(".wtr");
+	std::string file_path = filename + zone_name + std::string(".wtr");
 	FILE *f = fopen(file_path.c_str(), "rb");
 	if(f) {
 		char magic[10];
