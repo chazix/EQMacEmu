@@ -147,8 +147,10 @@ void Mob::TryBashKickStun(Mob* defender, uint8 skill)
 			stun_resist = defender->aabonuses.StunResist;						// Stalwart Endurance AA
 		}
 
-		if (defender->GetBaseRace() == OGRE && !BehindMob(defender, GetX(), GetY()))		// should this work if the ogre is illusioned?
-		{
+		// all large races to have frontal stun immunity
+		if ((defender->GetBaseRace() == OGRE || defender->GetBaseRace() == TROLL || defender->GetBaseRace() == BARBARIAN) &&
+				!BehindMob(defender, GetX(), GetY())		// should this work if the illusioned?
+		) {
 			Log(Logs::Detail, Logs::Combat, "Frontal stun resisted because, Ogre.");
 		}
 		else
