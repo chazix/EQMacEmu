@@ -243,6 +243,9 @@ RULE_INT(Quarm, BardDamagingAOECap, 4)
 RULE_BOOL(Quarm, CorpseUnlockIsHalvedDecayTime, true)
 RULE_INT(Quarm, AccidentalFallTimerMS, 15000) // Length of initial zonein fall protection, in MS.
 RULE_REAL(Quarm, AccidentalFallUnitDist, 50.0) // Length of initial zonein fall protection, in MS.
+RULE_BOOL(Quarm, ThanksgivingExpBonus, false)
+RULE_REAL(Quarm, ThanksgivingExpBonusOutdoorAmt, 0.20)
+RULE_REAL(Quarm, FlyingRaceExpBonus, 0.50)
 RULE_CATEGORY_END()
 
 RULE_CATEGORY( Map )
@@ -283,7 +286,7 @@ RULE_REAL ( Spells, ResistChance, 2.0) //chance to resist given no resists and s
 RULE_INT ( Spells, WizCritLevel, 12) // level wizards first get spell crits
 RULE_INT ( Spells, TranslocateTimeLimit, 0) // If not zero, time in seconds to accept a Translocate.
 RULE_INT ( Spells, SacrificeMinLevel, 46)	//first level Sacrifice will work on
-RULE_INT ( Spells, SacrificeMaxLevel, 69)	//last level Sacrifice will work on
+RULE_INT ( Spells, SacrificeMaxLevel, 60)	//last level Sacrifice will work on
 RULE_INT ( Spells, SacrificeItemID, 9963)	//Item ID of the item Sacrifice will return (defaults to an EE)
 RULE_BOOL ( Spells, EnableSpellGlobals, false)	// If Enabled, spells check the spell_globals table and compare character data from the quest globals before allowing that spell to scribe with scribespells
 RULE_INT ( Spells, MaxBuffSlotsNPC, 30)
@@ -317,6 +320,7 @@ RULE_BOOL ( Spells, SHDProcIDOffByOne, true) // pre June 2009 SHD spell procs we
 RULE_BOOL ( Spells, SwarmPetTargetLock, false) // Use old method of swarm pets target locking till target dies then despawning.
 RULE_INT ( Spells, SpellRecoveryTimer, 2500) // Begins when a cast is complete, and is checked after the next spell finishes casting. If not expired, the new spell is interrupted. Clickies are exempt.
 RULE_BOOL ( Spells, JamFestAAOnlyAffectsBard, true) // Bard Jam Fest AA only worked on bards themselves but was changed after AK's era.  Changing this to false will put the client stats out of sync with the server.
+RULE_BOOL ( Spells, ReducePacifyDuration, false) // AK and the eqmac client have 60 tick Pacify (spell 45) duration.  This rule reduces the duration to 7 ticks without desyncing the cast bar and focus effects for custom servers that want this.
 RULE_CATEGORY_END()
 
 RULE_CATEGORY( Combat )
@@ -385,6 +389,7 @@ RULE_INT ( Chat, MaxMessagesBeforeKick, 60)
 RULE_INT ( Chat, IntervalDurationMS, 60000)
 RULE_INT ( Chat, KarmaUpdateIntervalMS, 120000)
 RULE_INT ( Chat, KarmaGlobalChatLimit, 12) //amount of karma you need to be able to talk in ooc/auction/chat below the level limit
+RULE_INT ( Chat, KarmaGlobalChatLevelLimit, 8) //level limit you need to of reached to talk in ooc/auction/chat if your karma is too low.
 RULE_INT ( Chat, GlobalChatLevelLimit, 8) //level limit you need to of reached to talk in ooc/auction/chat if your karma is too low.
 RULE_CATEGORY_END()
 

@@ -155,9 +155,9 @@ Client::Client(EQStreamInterface* ieqs)
 {
 	for(int cf=0; cf < _FilterCount; cf++)
 		ClientFilters[cf] = FilterShow;
-
+	
 	for (int aa_ix = 0; aa_ix < MAX_PP_AA_ARRAY; aa_ix++) { aa[aa_ix] = nullptr; }
-
+	
 	character_id = 0;
 	zoneentry = nullptr;
 	conn_state = NoPacketsReceived;
@@ -776,7 +776,7 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
 				{
 					if(AttemptedMessages > RuleI(Chat, MaxMessagesBeforeKick))
 					{
-						Kick();
+						RevokeSelf();
 						return;
 					}
 					if(GlobalChatLimiterTimer)
@@ -918,7 +918,7 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
 
 			if(TotalKarma < RuleI(Chat, KarmaGlobalChatLimit))
 			{
-				if(GetLevel() < RuleI(Chat, GlobalChatLevelLimit))
+				if(GetLevel() < RuleI(Chat, KarmaGlobalChatLevelLimit))
 				{
 					Message(CC_Default, "You do not have permission to talk in Auction at this time.");
 					return;
@@ -965,7 +965,7 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
 
 			if(TotalKarma < RuleI(Chat, KarmaGlobalChatLimit))
 			{
-				if(GetLevel() < RuleI(Chat, GlobalChatLevelLimit))
+				if(GetLevel() < RuleI(Chat, KarmaGlobalChatLevelLimit))
 				{
 					Message(CC_Default, "You do not have permission to talk in OOC at this time.");
 					return;
@@ -998,11 +998,17 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
 	}
 	case ChatChannel_Tell: { /* Tell */
 
+			if (GetLevel() < RuleI(Chat, GlobalChatLevelLimit))
+			{
+				Message(CC_Default, "You do not have permission to send tells until level %i.", RuleI(Chat, GlobalChatLevelLimit));
+				return;
+			}
+
 			if(TotalKarma < RuleI(Chat, KarmaGlobalChatLimit))
 			{
-				if(GetLevel() < RuleI(Chat, GlobalChatLevelLimit))
+				if(GetLevel() < RuleI(Chat, KarmaGlobalChatLevelLimit))
 				{
-					Message(CC_Default, "You do not have permission to send tells at this time.");
+					Message(CC_Default, "You do not have permission to send tells.");
 					return;
 				}
 			}
@@ -3053,7 +3059,7 @@ void Client::SacrificeConfirm(Client *caster) {
 
 	if (GetLevel() > RuleI(Spells, SacrificeMaxLevel)) 
 	{
-		caster->Message_StringID(CC_Red, SAC_TOO_HIGH);
+		caster->Message_StringID(CC_Red, SAC_TOO_HIGH); //This being is too powerful to be a sacrifice.
 		safe_delete(outapp);
 		return;
 	}
@@ -5066,7 +5072,7 @@ void Client::SendSoulMarks(SoulMarkList_Struct* SMS)
 		return;
 
 	auto outapp = new EQApplicationPacket(OP_SoulMarkUpdate, sizeof(SoulMarkList_Struct));
-	memset(outapp->pBuffer, 0, sizeof(outapp->pBuffer));
+	memset(outapp->pBuffer, 0, sizeof(SoulMarkList_Struct));
 	SoulMarkList_Struct* soulmarks = (SoulMarkList_Struct*)outapp->pBuffer;
 	memcpy(&soulmarks->entries, SMS->entries, 12 * sizeof(SoulMarkEntry_Struct));
 	strncpy(soulmarks->interrogatename, SMS->interrogatename, 64);
@@ -6368,6 +6374,16 @@ bool Client::RemoveLootedLegacyItem(uint16 item_id)
 		looted_legacy_items.erase(it);
 	}
 	return true;
+}
+
+void Client::RevokeSelf()
+{
+	if (GetRevoked())
+		return;
+
+	std::string query = StringFormat("UPDATE account SET revoked = 1 WHERE id = %i", AccountID());
+	SetRevoked(1);
+	database.QueryDatabase(query);
 }
 
 
