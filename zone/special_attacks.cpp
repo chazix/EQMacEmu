@@ -147,7 +147,7 @@ void Mob::TryBashKickStun(Mob* defender, uint8 skill)
 			stun_resist = defender->aabonuses.StunResist;						// Stalwart Endurance AA
 		}
 
-		// all large races to have frontal stun immunity
+		// all large races to have frontal stun immunity (nurmess eq)
 		if ((defender->GetBaseRace() == OGRE || defender->GetBaseRace() == TROLL || defender->GetBaseRace() == BARBARIAN) &&
 				!BehindMob(defender, GetX(), GetY())		// should this work if the illusioned?
 		) {
