@@ -175,6 +175,11 @@ int32 Client::CalcHPRegen()
 	// add AA regen - this is here because of the check below needing to negate it so we can bleed out in sync with the client
 	hp_regen_amount += aabonuses.HPRegen;
 
+	int32 restedHPRegenBonus = RuleI(Nurmess, RestedHPRegenBonus);
+	if (restedHPRegenBonus > 0 && IsRested()) {
+		hp_regen_amount += restedHPRegenBonus;
+	}
+
 	// we're almost dead, our regeneration won't save us now but a heal could
 	if (GetHP() <= 0)
 	{
@@ -972,6 +977,11 @@ int32 Client::CalcManaRegen(bool meditate)
 	if (GetBuffSlotFromType(SE_CompleteHeal) >= 0)
 	{
 		regen += 1;
+	}
+
+	int32 restedManaRegenBonus = RuleI(Nurmess, RestedManaRegenBonus);
+	if (restedManaRegenBonus > 0 && IsRested()) {
+		regen += restedManaRegenBonus;
 	}
 
 	return regen;

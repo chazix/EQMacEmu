@@ -3855,9 +3855,8 @@ void Mob::TryCriticalHit(Mob *defender, uint16 skill, int32 &damage, int32 minBa
 	if (IsClient())
 	{
 		// Combat Fury and Fury of the Ages AAs
-		int critChanceMult = aabonuses.CriticalHitChance;
+		int critChanceMult = aabonuses.CriticalHitChance + RuleI(Combat, ClientBaseCritChance);
 
-		critChance += RuleI(Combat, ClientBaseCritChance);
 		float overCap = 0.0f;
 		if (GetDEX() > 255)
 			overCap = static_cast<float>(GetDEX() - 255) / 400.0f;

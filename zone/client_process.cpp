@@ -110,7 +110,8 @@ bool Client::Process() {
 			{
 				if (!rest_timer.Enabled())
 				{
-					rest_timer.Start(60000);
+					int32 regenTimeToActivate = RuleI(Character, RestRegenTimeToActivate);
+					rest_timer.Start(regenTimeToActivate);
 				}
 				else if (rest_timer.Check())
 				{

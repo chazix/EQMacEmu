@@ -136,7 +136,7 @@ int32 Client::GetActSpellDamage(uint16 spell_id, int32 dmg, Mob* target)
 	}
 
 	bool critical = false;
-	int critChanceAA = itembonuses.CriticalSpellChance + spellbonuses.CriticalSpellChance + aabonuses.CriticalSpellChance;
+	int critChanceAA = itembonuses.CriticalSpellChance + spellbonuses.CriticalSpellChance + aabonuses.CriticalSpellChance + RuleR(Spells, BaseCritChance);
 
 	if (critChanceAA && zone->random.Roll(critChanceAA))
 		critical = true;

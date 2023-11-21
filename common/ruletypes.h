@@ -69,6 +69,7 @@ RULE_BOOL(Character, ForageNeedFoodorDrink, false)
 RULE_BOOL (Character, DisableAAs, false) // Disables server side AA support, since the client allows some AA activity through even with a pre-Luclin expansion set.
 RULE_BOOL ( Character, SacrificeCorpseDepop, false) // If true, Sacrificed corpses will depop 3 minutes after they become empty in Pok, Nexus, or Bazaar
 RULE_INT ( Character, DefaultExpansions, 15) // When a new account is created, this is the default expansions it is given. 1 Kunark 2 Velious 4 Luclin 8 PoP.
+RULE_INT (Character, RestRegenTimeToActivate, 60000) // Time in seconds for rest state regen to kick in.
 RULE_CATEGORY_END()
 
 RULE_CATEGORY( Guild )
@@ -245,6 +246,11 @@ RULE_INT(Quarm, AccidentalFallTimerMS, 15000) // Length of initial zonein fall p
 RULE_REAL(Quarm, AccidentalFallUnitDist, 50.0) // Length of initial zonein fall protection, in MS.
 RULE_CATEGORY_END()
 
+RULE_CATEGORY(Nurmess)
+RULE_INT(Nurmess, RestedManaRegenBonus, 0) // additional bonus to mana regen while resting
+RULE_INT(Nurmess, RestedHPRegenBonus, 0) // additional bonus to hp regen while resting
+RULE_CATEGORY_END()
+
 RULE_CATEGORY( Map )
 //enable these to help prevent mob hopping when they are pathing
 RULE_BOOL ( Map, FixPathingZWhenLoading, true )		//increases zone boot times a bit to reduce hopping.
@@ -292,6 +298,7 @@ RULE_INT ( Spells, MaxTotalSlotsPET, 15)
 RULE_INT ( Spells, ReflectType, 1) //0 = disabled, 1 = single target player spells only, 2 = all player spells, 3 = all single target spells, 4 = all spells
 RULE_BOOL( Spells, LiveLikeFocusEffects, true) // Determines whether specific healing, dmg and mana reduction focuses are randomized
 RULE_INT ( Spells, BaseImmunityLevel, 55) // The level that targets start to be immune to stun, fear and mez spells with a max level of 0.
+RULE_REAL ( Spells, BaseCritChance, 0.0) // The base crit chance for spells.  This is the chance to crit at level 0 with no crit AA's.
 RULE_INT ( Spells, ResistFalloff, 67) //Max that level that will adjust our resist chance based on level modifiers
 RULE_INT ( Spells, CharmMinResist, 5) // When rolling charm tick save throws, this is the minimum value that resists can result to after debuffs and level advantage.  This essentially determines how good charm is
 RULE_INT ( Spells, RootBreakFromSpells, 55) //Chance for root to break when cast on.
