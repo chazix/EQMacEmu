@@ -5,7 +5,6 @@
 #include <map>
 #include <queue>
 #include <deque>
-#include <mutex>
 
 #ifndef WIN32
 #include <netinet/in.h>
@@ -232,13 +231,14 @@ class EQStream : public EQStreamInterface {
 		uint16 stale_count;
 
 		uint8 active_users;	//how many things are actively using this
-		std::mutex MInUse;
+		Mutex MInUse;
 
 		EQStreamState State;
-		std::mutex MState;
+		Mutex MState;
 
 		uint32 LastPacket;
 		uint32 LastSent;
+		Mutex MVarlock;
 
 		// Ack sequence tracking.
 		long NextAckToSend;
@@ -249,7 +249,7 @@ class EQStream : public EQStreamInterface {
 		void SetNextAckToSend(uint32);
 		void SetLastAckSent(uint32);
 
-		std::mutex MAcks;
+		Mutex MAcks;
 
 		// Packets waiting to be sent (all protected by MOutboundQueue)
 		std::queue<EQProtocolPacket *> NonSequencedQueue;
@@ -258,7 +258,7 @@ class EQStream : public EQStreamInterface {
 		uint16 SequencedBase;	//the sequence number of SequencedQueue[0]
 		bool stream_startup;
 		long NextSequencedSend;	//index into SequencedQueue
-		std::mutex MOutboundQueue;
+		Mutex MOutboundQueue;
 
 		//a buffer we use for compression/decompression
 		unsigned char _tempBuffer[2048];
@@ -266,13 +266,13 @@ class EQStream : public EQStreamInterface {
 		// Packets waiting to be processed
 		std::vector<EQRawApplicationPacket *> InboundQueue;
 		std::map<unsigned short,EQProtocolPacket *> PacketQueue;		//not mutex protected, only accessed by caller of Process()
-		std::mutex MInboundQueue;
+		Mutex MInboundQueue;
 
 		static uint16 MaxWindowSize;
 
 		int32 BytesWritten;
 
-		std::mutex MRate;
+		Mutex MRate;
 		int32 RateThreshold;
 		int32 DecayRate;
 
@@ -331,7 +331,7 @@ class EQStream : public EQStreamInterface {
 		virtual void Close();
 		virtual uint32 GetRemoteIP() const { return remote_ip; }
 		virtual uint16 GetRemotePort() const { return remote_port; }
-		virtual void ReleaseFromUse() { std::lock_guard<std::mutex> lock(MInUse); if(active_users > 0) active_users--; }
+		virtual void ReleaseFromUse() { MInUse.lock(); if(active_users > 0) active_users--; MInUse.unlock(); }
 		virtual void RemoveData() { InboundQueueClear(); OutboundQueueClear(); PacketQueueClear(); /*if (CombinedAppPacket) delete CombinedAppPacket;*/ }
 		virtual bool CheckState(EQStreamState state) { return GetState() == state; }
 		virtual std::string Describe() const { return("Direct EQStream"); }
@@ -348,10 +348,10 @@ class EQStream : public EQStreamInterface {
 		// whether or not the stream has been assigned (we passed our stream match)
 		void SetActive(bool val) { streamactive = val; }
 
-		virtual bool IsInUse() { bool flag; std::lock_guard<std::mutex> lock(MInUse); flag=(active_users>0); return flag; }
-		inline void PutInUse() { std::lock_guard<std::mutex> lock(MInUse); active_users++; }
+		virtual bool IsInUse() { bool flag; MInUse.lock(); flag=(active_users>0); MInUse.unlock(); return flag; }
+		inline void PutInUse() { MInUse.lock(); active_users++; MInUse.unlock(); }
 
-		inline EQStreamState GetState() { EQStreamState s; std::lock_guard<std::mutex> lock(MState); s=State; return s; }
+		inline EQStreamState GetState() { EQStreamState s; MState.lock(); s=State; MState.unlock(); return s; }
 
 		static SeqOrder CompareSequence(uint16 expected_seq , uint16 seq);
 
@@ -423,16 +423,17 @@ class EQOldStream : public EQStreamInterface {
 		~EQOldStream();
 
 	protected:
-		std::mutex MOutboundOldQueue;
-		std::mutex MInboundOldQueue;
+		Mutex MResendQueue;
+		Mutex MOutboundQueue;
+		Mutex MInboundQueue;
 		uint32 remote_ip;
 		uint16 remote_port;
 		EQStreamState State;
-		std::mutex MState;
+		Mutex MState;
 		EQStreamType StreamType;
 
 		uint8 active_users;	//how many things are actively using this
-		std::mutex MInUse;
+		Mutex MInUse;
 
 	public:
 		bool IsTooMuchPending()
@@ -457,7 +458,7 @@ class EQOldStream : public EQStreamInterface {
 				
 		// parce/make packets
 		void ParceEQPacket(uint16 dwSize, uchar* pPacket);
-		void MakeEQPacket(EQProtocolPacket* app, bool ack_req=true, bool outboundAlreadyLocked=false); //Make a fragment eq packet and put them on the SQUEUE/RSQUEUE
+		void MakeEQPacket(EQProtocolPacket* app, bool ack_req=true); //Make a fragment eq packet and put them on the SQUEUE/RSQUEUE
 		void MakeClosePacket();
 		// Add ack to packet if requested
 		void AddAck(EQOldPacket *pack)
@@ -523,11 +524,12 @@ class EQOldStream : public EQStreamInterface {
 		int listening_socket;
 		uint16 arsp_response;
 
-		std::mutex MRate;
+		Mutex MRate;
 		int32 RateThreshold;
 		int32 DecayRate;
 
 		uint32 LastPacket;
+		Mutex MVarlock;
 		bool sent_Fin;
 		
 		int32	datarate_sec;	// bytes/1000ms
@@ -541,15 +543,15 @@ class EQOldStream : public EQStreamInterface {
 		virtual EQApplicationPacket *PopPacket();
 		virtual uint32 GetRemoteIP() const { return remote_ip; }
 		virtual uint16 GetRemotePort() const { return remote_port; }
-		virtual void ReleaseFromUse() { std::lock_guard<std::mutex> lock(MInUse); if(active_users > 0) active_users--; }
+		virtual void ReleaseFromUse() { MInUse.lock(); if(active_users > 0) active_users--; MInUse.unlock(); }
 		virtual void RemoveData();
 		virtual bool CheckState(EQStreamState state) { return GetState() == state; }
 		virtual std::string Describe() const { return("Direct EQOldStream"); }
-		virtual bool IsInUse() { bool flag; std::lock_guard<std::mutex> lock(MInUse); flag=(active_users>0); return flag; }
+		virtual bool IsInUse() { bool flag; MInUse.lock(); flag=(active_users>0); MInUse.unlock(); return flag; }
 		bool IsWriting() { return isWriting; }
 		void SetWriting(bool var) { isWriting = var; } 
-		inline void PutInUse() { std::lock_guard<std::mutex> lock(MInUse); active_users++; }
-		inline EQStreamState GetState() { EQStreamState s; std::lock_guard<std::mutex> lock(MState); s=pm_state; return s; }
+		inline void PutInUse() { MInUse.lock(); active_users++; MInUse.unlock(); }
+		inline EQStreamState GetState() { EQStreamState s; MState.lock(); s=pm_state; MState.unlock(); return s; }
 		void	SendPacketQueue(bool Block = true);
 		void	FinalizePacketQueue();
 		void	ClearPacketQueue();
