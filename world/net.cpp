@@ -142,6 +142,7 @@ void TriggerManualQuake()
 	NextQuakeTimer.Enable();
 	NextQuakeTimer.Start((next_quake.next_start_timestamp - cur_time) * 1000);
 
+#if 0
 	std::string motd_str = "Welcome to Project Quarm! ";
 	motd_str += "The ";
 	motd_str += QuakeTypeToString(next_quake.quake_type).c_str();
@@ -155,6 +156,7 @@ void TriggerManualQuake()
 	strn0cpy(mss->motd, motd_str.c_str(), sizeof(mss->motd));
 
 	zoneserver_list.SendPacket(pack2);
+#endif
 
 	//Roleplay flavor text, go!
 	zoneserver_list.SendEmoteMessage(0, 0, AccountStatus::Player, CC_Red, "Druzzil Ro's voice echoes in your mind, 'Mortals... they always aren't content with what they have, aren't they?'");
@@ -168,7 +170,9 @@ void TriggerManualQuake()
 	seis->start_timestamp = next_quake.start_timestamp;
 	zoneserver_list.SendPacket(pack);
 
+#if 0
 	safe_delete(pack2);
+#endif
 	safe_delete(pack);
 
 	//Timer needs to be set to enforce MOTD rules.
@@ -541,6 +545,7 @@ int main(int argc, char** argv) {
 				NextQuakeTimer.Enable();
 				NextQuakeTimer.Start((next_quake.next_start_timestamp - cur_time) * 1000);
 
+#if 0
 				std::string motd_str = "Welcome to Project Quarm! ";
 				motd_str += "The ";
 				motd_str += QuakeTypeToString(next_quake.quake_type).c_str();
@@ -554,6 +559,7 @@ int main(int argc, char** argv) {
 				strn0cpy(mss->motd, motd_str.c_str(), sizeof(mss->motd));
 
 				zoneserver_list.SendPacket(pack2);
+#endif
 
 				//Roleplay flavor text, go!
 				zoneserver_list.SendEmoteMessage(0, 0, AccountStatus::Player, CC_Red, "Druzzil Ro's voice echoes in your mind, 'Mortals... they always aren't content with what they have, aren't they?'");
@@ -567,7 +573,9 @@ int main(int argc, char** argv) {
 				seis->start_timestamp = next_quake.start_timestamp;
 				zoneserver_list.SendPacket(pack);
 
+#if 0
 				safe_delete(pack2);
+#endif
 				safe_delete(pack);
 
 				//Timer needs to be set to enforce MOTD rules.
@@ -577,6 +585,7 @@ int main(int argc, char** argv) {
 
 			if (DisableQuakeTimer.Check())
 			{
+#if 0
 				std::string motd_str = "Welcome to Project Quarm! ";
 				motd_str += "The standard ruleset is currently in effect. (GM-Enforced Rotations)";
 				database.SetVariable("MOTD", motd_str.c_str());
@@ -587,6 +596,7 @@ int main(int argc, char** argv) {
 				strn0cpy(mss->motd, motd_str.c_str(), sizeof(mss->motd));
 				zoneserver_list.SendPacket(pack3);
 				safe_delete(pack3);
+#endif
 
 				//MOTD has been set. Roleplay flavor text, go!
 				zoneserver_list.SendEmoteMessage(0, 0, AccountStatus::Player, CC_Red, "Druzzil Ro's voice echoes in your mind, 'It seems as though the mortals have had enough of my games. I must teach them to share again.'");
