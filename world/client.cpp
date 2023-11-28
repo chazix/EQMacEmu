@@ -1149,7 +1149,7 @@ bool Client::OPCharCreate(char *name, CharCreate_Struct *cc)
 	Log(Logs::Detail, Logs::WorldServer, "Beard: %d  Beardcolor: %d", cc->beard, cc->beardcolor);
 
 	/* Validate the char creation struct */
-		if(!CheckCharCreateInfo(cc)) {
+		if(!Client::CheckCharCreateInfo(cc)) {
 			Log(Logs::Detail, Logs::WorldServer,"CheckCharCreateInfo did not validate the request (bad race/class/stats)");
 			return false;
 		}
@@ -1262,14 +1262,14 @@ bool Client::OPCharCreate(char *name, CharCreate_Struct *cc)
 }
 
 // returns true if the request is ok, false if there's an error
-bool CheckCharCreateInfo(CharCreate_Struct *cc)
+bool Client::CheckCharCreateInfo(CharCreate_Struct *cc)
 {
 	if (!cc)
 		return false;
 
 	Log(Logs::Detail, Logs::WorldServer, "Validating char creation info...");
 
-	int currentExpansions = RuleI(Character, DefaultExpansions);
+	int currentExpansions = GetExpansion(); // Get expansion value from account table
 
 	RaceClassCombos class_combo;
 	bool found = false;
