@@ -481,6 +481,7 @@ RULE_CATEGORY_END()
 RULE_CATEGORY(Items)
 RULE_BOOL(Items, DisableNoDrop, false)
 RULE_BOOL(Items, DisableNoRent, false)
+RULE_BOOL(Items, GateLegacyLoot, false)
 RULE_CATEGORY_END()
 
 RULE_CATEGORY(Bugs)

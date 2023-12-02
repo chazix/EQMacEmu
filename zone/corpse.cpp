@@ -1417,41 +1417,25 @@ void Corpse::LootItem(Client* client, const EQApplicationPacket* app) {
 		}
 	}
 
-		if (client->CheckLoreConflict(item)) {
-			client->Message_StringID(0, LOOT_LORE_ERROR);
-			SendEndLootErrorPacket(client);
-			ResetLooter();
-			if (contains_legacy_item) { RemoveLegacyItemLooter(client->GetID()); }
-			delete inst;
-			return;
-		}
+	if (client->CheckLoreConflict(item)) {
+		client->Message_StringID(0, LOOT_LORE_ERROR);
+		SendEndLootErrorPacket(client);
+		ResetLooter();
+		if (contains_legacy_item) { RemoveLegacyItemLooter(client->GetID()); }
+		delete inst;
+		return;
+	}
 
-		// search through bags for lore items
-		if (item && item->IsClassBag()) {
-			for (int i = 0; i < 10; i++) {
-				if (bag_item_data[i])
-				{
-					const EQ::ItemData* bag_item = 0;
-					bag_item = database.GetItem(bag_item_data[i]->item_id);
-					if (bag_item && client->CheckLoreConflict(bag_item))
-					{
-						client->Message(CC_Default, "You cannot loot this container. The %s inside is a Lore Item and you already have one.", bag_item->Name);
-						SendEndLootErrorPacket(client);
-						ResetLooter();
-						if (contains_legacy_item) { RemoveLegacyItemLooter(client->GetID()); }
-						delete inst;
-						return;
-					}
-				}
-			}
-		}
-
-		if (client && inst && item_data) {
-			if (item_data->pet || item_data->quest)
+	// search through bags for lore items
+	if (item && item->IsClassBag()) {
+		for (int i = 0; i < 10; i++) {
+			if (bag_item_data[i])
 			{
-				if (client->IsSoloOnly() || client->IsSelfFound())
+				const EQ::ItemData* bag_item = 0;
+				bag_item = database.GetItem(bag_item_data[i]->item_id);
+				if (bag_item && client->CheckLoreConflict(bag_item))
 				{
-					client->Message(CC_Red, "This item is from a charmed pet, which is not allowed during a solo or self found run.");
+					client->Message(CC_Default, "You cannot loot this container. The %s inside is a Lore Item and you already have one.", bag_item->Name);
 					SendEndLootErrorPacket(client);
 					ResetLooter();
 					if (contains_legacy_item) { RemoveLegacyItemLooter(client->GetID()); }
@@ -1459,30 +1443,48 @@ void Corpse::LootItem(Client* client, const EQApplicationPacket* app) {
 					return;
 				}
 			}
+		}
+	}
 
-		if (!IsPlayerCorpse() && item_data->min_looter_level != 0)
+	if (client && inst && item_data) {
+		if (item_data->pet || item_data->quest)
 		{
-			if (client->GetLevel() < item_data->min_looter_level)
+			if (client->IsSoloOnly() || client->IsSelfFound())
 			{
-				client->Message(CC_Red, "You cannot loot this type of legacy item. Required character level: %i", item_data->min_looter_level);
+				client->Message(CC_Red, "This item is from a charmed pet, which is not allowed during a solo or self found run.");
 				SendEndLootErrorPacket(client);
 				ResetLooter();
 				if (contains_legacy_item) { RemoveLegacyItemLooter(client->GetID()); }
 				delete inst;
 				return;
 			}
+		}
 
-			if (client->CheckLegacyItemLooted(item_data->item_id))
+		if (RuleB(Items, GateLegacyLoot)) {
+			if (!IsPlayerCorpse() && item_data->min_looter_level != 0)
 			{
-				client->Message(CC_Red, "This is a legacy item. You've already looted a legacy item of this type already on this character.");
-				SendEndLootErrorPacket(client);
-				ResetLooter();
-				if (contains_legacy_item) { RemoveLegacyItemLooter(client->GetID()); }
-				delete inst;
-				return;
-			}
+				if (client->GetLevel() < item_data->min_looter_level)
+				{
+					client->Message(CC_Red, "You cannot loot this type of legacy item. Required character level: %i", item_data->min_looter_level);
+					SendEndLootErrorPacket(client);
+					ResetLooter();
+					if (contains_legacy_item) { RemoveLegacyItemLooter(client->GetID()); }
+					delete inst;
+					return;
+				}
 
-			client->AddLootedLegacyItem(item_data->item_id);
+				if (client->CheckLegacyItemLooted(item_data->item_id))
+				{
+					client->Message(CC_Red, "This is a legacy item. You've already looted a legacy item of this type already on this character.");
+					SendEndLootErrorPacket(client);
+					ResetLooter();
+					if (contains_legacy_item) { RemoveLegacyItemLooter(client->GetID()); }
+					delete inst;
+					return;
+				}
+
+				client->AddLootedLegacyItem(item_data->item_id);
+			}
 		}
 
 		char buf[88];
