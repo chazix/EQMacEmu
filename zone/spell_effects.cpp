@@ -3545,10 +3545,17 @@ void Mob::BuffFadeBySlot(int slot, bool iRecalcBonuses, bool message, bool updat
 			}
 			// Our spell has worn off another NPC or client.
 			// Lulls/harmonies don't show message
-			else if ((p != this && !p->IsPet() && !IsBeneficialSpell(buffs[slot].spellid) && !IsCrowdControlSpell(buffs[slot].spellid))
+			else if ((p != this && !p->IsPet() &&
+				((RuleB(Spells, NotifyBeneficialWornOff) && IsBeneficialSpell(buffs[slot].spellid)) || !IsBeneficialSpell(buffs[slot].spellid)) &&
+				!IsCrowdControlSpell(buffs[slot].spellid))
 				|| detrimental_exception)
 			{
-				p->Message_StringID(MT_WornOff, SPELL_WORN_OFF, spellname);
+				if (RuleB(Spells, NotifyBeneficialWornOff) && IsBeneficialSpell(buffs[slot].spellid)) {
+					p->Message_StringID(MT_WornOff, SPELL_WORN_OFF_OF, spellname, GetName());
+				}
+				else {
+					p->Message_StringID(MT_WornOff, SPELL_WORN_OFF, spellname);
+				}
 			}
 		}
 	}

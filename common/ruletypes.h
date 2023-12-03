@@ -324,6 +324,7 @@ RULE_BOOL ( Spells, SHDProcIDOffByOne, true) // pre June 2009 SHD spell procs we
 RULE_BOOL ( Spells, SwarmPetTargetLock, false) // Use old method of swarm pets target locking till target dies then despawning.
 RULE_INT ( Spells, SpellRecoveryTimer, 2500) // Begins when a cast is complete, and is checked after the next spell finishes casting. If not expired, the new spell is interrupted. Clickies are exempt.
 RULE_BOOL ( Spells, JamFestAAOnlyAffectsBard, true) // Bard Jam Fest AA only worked on bards themselves but was changed after AK's era.  Changing this to false will put the client stats out of sync with the server.
+RULE_BOOL ( Spells, NotifyBeneficialWornOff, false) // Notify when a beneficial spell has worn off.
 RULE_CATEGORY_END()
 
 RULE_CATEGORY( Combat )
