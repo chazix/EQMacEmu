@@ -353,6 +353,7 @@ RULE_BOOL ( Combat, UseDiscTimerGroups, false) // After about 2004 or so, disc r
 RULE_INT ( Combat, PvPMeleeDmgPct, 100) // Percentage of melee damage done in PvP combat. 100 = 100% i.e. unmodified
 RULE_INT ( Combat, PvPSpellDmgPct, 62) // Percentage of spell damage done in PvP combat. 100 = 100% i.e. unmodified
 RULE_INT ( Combat, PvPArcheryDmgPct, 100) // Percentage of archery damage done in PvP combat. 100 = 100% i.e. unmodified
+RULE_BOOL ( Combat, EveryoneCanKickStun, false) // If true, everyone can kick stun. If false, only warriors >= 55 can kick stun.
 RULE_CATEGORY_END()
 
 RULE_CATEGORY( NPC )
