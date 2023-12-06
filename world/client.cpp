@@ -1279,7 +1279,7 @@ bool CheckCharCreateInfo(CharCreate_Struct *cc)
 				character_create_race_class_combos[i].Race == cc->race &&
 				character_create_race_class_combos[i].Deity == cc->deity &&
 				character_create_race_class_combos[i].Zone == cc->start_zone &&
-			(currentExpansions & character_create_race_class_combos[i].ExpansionRequired == character_create_race_class_combos[i].ExpansionRequired || character_create_race_class_combos[i].ExpansionRequired == 0)) {
+			((currentExpansions & character_create_race_class_combos[i].ExpansionRequired) == character_create_race_class_combos[i].ExpansionRequired || character_create_race_class_combos[i].ExpansionRequired == 0)) {
 			class_combo = character_create_race_class_combos[i];
 			found = true;
 			break;
