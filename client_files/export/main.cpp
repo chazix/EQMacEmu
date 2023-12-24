@@ -29,6 +29,7 @@
 
 EQEmuLogSys LogSys;
 
+void ExportSpellsEn(SharedDatabase *db);
 void ExportSpells(SharedDatabase *db);
 void ExportSkillCaps(SharedDatabase *db);
 void ExportBaseData(SharedDatabase *db);
@@ -59,6 +60,7 @@ int main(int argc, char **argv) {
 		->LoadLogDatabaseSettings()
 		->StartFileLogs();
 
+	ExportSpellsEn(&database);
 	ExportSpells(&database);
 	ExportSkillCaps(&database);
 	ExportBaseData(&database);
@@ -66,6 +68,41 @@ int main(int argc, char **argv) {
 	LogSys.CloseFileLogs();
 
 	return 0;
+}
+
+void ExportSpellsEn(SharedDatabase* db) {
+	Log(Logs::General, Logs::Status, "Exporting Spells En...");
+
+	FILE* f = fopen("export/spells_en.txt", "w");
+	if (!f) {
+		Log(Logs::General, Logs::Error, "Unable to open export/spells_en.txt to write, skipping.");
+		return;
+	}
+
+	const std::string query = "SELECT * FROM spells_en ORDER BY id";
+	auto results = db->QueryDatabase(query);
+
+	if (results.Success()) {
+		for (auto row = results.begin(); row != results.end(); ++row) {
+			std::string line;
+			unsigned int fields = results.ColumnCount();
+			for (unsigned int i = 0; i < fields; ++i) {
+				if (i != 0) {
+					line.push_back('^');
+				}
+
+				if (row[i] != nullptr) {
+					line += row[i];
+				}
+			}
+
+			fprintf(f, "%s\n", line.c_str());
+		}
+	}
+	else {
+	}
+
+	fclose(f);
 }
 
 void ExportSpells(SharedDatabase *db) {
