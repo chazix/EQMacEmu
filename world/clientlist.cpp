@@ -32,7 +32,6 @@
 #include "../zone/string_ids.h"
 
 #include <set>
-#include <cstring>  // For strlen and strncat
 
 extern ConsoleList		console_list;
 extern ZSList			zoneserver_list;
@@ -674,7 +673,7 @@ void ClientList::SendOnlineGuildMembers(uint32 FromID, uint32 GuildID)
 
 		Iterator.Advance();
 	}
-	zoneserver_list.SendPacket(from->zone(), pack);
+	zoneserver_list.SendPacket(from->zone(), from->GuildID(), pack);
 	safe_delete(pack);
 }
 
@@ -892,40 +891,6 @@ void ClientList::SendWhoAll(uint32 fromid,const char* to, int16 admin, Who_All_S
 
 				char plname[64] = { 0 };
 				strcpy(plname, cle->name());
-
-				// Append the SSFHC flags after the name if there's room
-				if(cle->IsSelfFound() || cle->IsHardcore() || cle->IsSolo())
-				{
-					// Start with the base append string
-					std::string appendStr = " -";
-
-					if(cle->IsSolo())
-						appendStr += "s";
-					if (cle->IsSelfFound())
-						appendStr += "sf";
-					if (cle->IsHardcore())
-						appendStr += "hc";
-
-					appendStr += "-";
-
-					// Calculate the remaining space in the buffer
-					size_t remainingSpace = 63 - strlen(plname); // 63 because we need one char for null-terminator
-					// Append appendStr to plname if there's enough space
-					if (remainingSpace >= appendStr.length()) {
-						// Append should look like this:
-						strncat(plname, appendStr.c_str(), remainingSpace);
-
-						// To prepend:
-						// char tempBuffer[64];
-						// // First, copy appendStr to tempBuffer
-						// strcpy(tempBuffer, appendStr.c_str());
-						// // Then concatenate plname to tempBuffer
-						// strncat(tempBuffer, plname, remainingSpace);
-						// // Copy back the combined string to plname
-						// strncpy(plname, tempBuffer, 64);
-						// plname[63] = '\0'; // Ensure null-termination
-					}
-				}
 
 				char placcount[30] = { 0 };
 				if (admin >= cle->Admin() && admin >= AccountStatus::QuestTroupe)
@@ -1366,7 +1331,7 @@ void ClientList::ZoneBootup(ZoneServer* zs) {
 	while(iterator.MoreElements())
 	{
 		if (iterator.GetData()->WaitingForBootup()) {
-			if (iterator.GetData()->GetZoneID() == zs->GetZoneID()) {
+			if (iterator.GetData()->GetZoneID() == zs->GetZoneID() && iterator.GetData()->GetZoneGuildID()) {
 				iterator.GetData()->EnterWorld(false);
 			}
 			else if (iterator.GetData()->WaitingForBootup() == zs->GetID()) {
@@ -1420,25 +1385,25 @@ bool ClientList::SendPacket(const char* to, ServerPacket* pack) {
 }
 
 void ClientList::SendGuildPacket(uint32 guild_id, ServerPacket* pack) {
-	std::set<uint32> zone_ids;
+	std::set<std::pair<uint32, uint32>> zone_ids;
 
 	LinkedListIterator<ClientListEntry*> iterator(clientlist);
 
 	iterator.Reset();
 	while(iterator.MoreElements()) {
 		if (iterator.GetData()->GuildID() == guild_id) {
-			zone_ids.insert(iterator.GetData()->zone());
+			zone_ids.emplace(iterator.GetData()->zone(), iterator.GetData()->GetZoneGuildID());
 		}
 		iterator.Advance();
 	}
 
 	//now we know all the zones, send it to each one... this is kinda a shitty way to do this
 	//since its basically O(n^2)
-	std::set<uint32>::iterator cur, end;
+	std::set<std::pair<uint32, uint32>>::iterator cur, end;
 	cur = zone_ids.begin();
 	end = zone_ids.end();
 	for(; cur != end; cur++) {
-		zoneserver_list.SendPacket(*cur, pack);
+		zoneserver_list.SendPacket(cur->first, cur->second, pack);
 	}
 }
 
@@ -1639,9 +1604,6 @@ bool ClientList::WhoAllFilter(ClientListEntry* client, Who_All_Struct* whom, int
 		((tmpZone != 0 && strncasecmp(tmpZone, whom->whom, whomlen) == 0 && not_anon) || //zone (GM only)
 		strncasecmp(client->name(),whom->whom, whomlen) == 0 || // name
 		(strncasecmp(guild_mgr.GetGuildName(client->GuildID()), whom->whom, whomlen) == 0 && guild_not_anon)|| // This is used by who all guild
-		(strstr(whom->whom, "solo") != NULL && client->IsSolo()) || // This is used to search for any players with the solo flag
-		(strstr(whom->whom, "selffound") != NULL && client->IsSelfFound() && !client->IsSolo()) || // This is used to search for any players with the self found flag
-		(strstr(whom->whom, "hardcore") != NULL && client->IsHardcore()) || // This is used to search for any players with the hardcore flag
 		(admin >= gmwholist && strncasecmp(client->AccountName(), whom->whom, whomlen) == 0)))) // account (GM only)
 	{
 		return true;

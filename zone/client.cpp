@@ -53,6 +53,8 @@
 #include "../common/packet_dump_file.h"
 #include "queryserv.h"
 
+#include "../common/repositories/character_spells_repository.h"
+
 extern QueryServ* QServ;
 extern EntityList entity_list;
 extern Zone* zone;
@@ -202,6 +204,7 @@ Client::Client(EQStreamInterface* ieqs)
 	runmode = true;
 	linkdead_timer.Disable();
 	zonesummon_id = 0;
+	zonesummon_guildid = GUILD_NONE;
 	zonesummon_ignorerestrictions = 0;
 	zoning = false;
 	m_lock_save_position = false;
@@ -224,6 +227,8 @@ Client::Client(EQStreamInterface* ieqs)
 	// initialise haste variable
 	m_tradeskill_object = nullptr;
 	PendingRezzXP = -1;
+	PendingRezzZoneID = 0;
+	PendingRezzZoneGuildID = 0;
 	PendingRezzDBID = 0;
 	PendingRezzSpellID = 0;
 	numclients++;
@@ -1089,7 +1094,7 @@ void Client::ChannelMessageReceived(uint8 chan_num, uint8 language, uint8 lang_s
 				}
 			}
 
-			char target_name[64];
+			char target_name[64] = {};
 
 			if(targetname)
 			{
@@ -1380,6 +1385,7 @@ void Client::UpdateWho(uint8 remove) {
 	scl->LSAccountID = this->LSAccountID();
 	strn0cpy(scl->lskey, lskey, sizeof(scl->lskey));
 	scl->zone = zone->GetZoneID();
+	scl->zoneguildid = zone->GetGuildID();
 	scl->race = this->GetRace();
 	scl->class_ = GetClass();
 	scl->level = GetLevel();
@@ -1400,10 +1406,6 @@ void Client::UpdateWho(uint8 remove) {
 	scl->AFK = this->AFK;
 	scl->Trader = this->IsTrader();
 	scl->Revoked = this->GetRevoked();
-
-	scl->selffound = this->IsSelfFound();
-	scl->hardcore = this->IsHardcore();
-	scl->solo = this->IsSoloOnly();
 
 	worldserver.SendPacket(pack);
 	safe_delete(pack);
@@ -2236,6 +2238,8 @@ uint16 Client::GetMaxSkillAfterSpecializationRules(EQ::skills::SkillType skillid
 			}
 			else
 			{
+				Result = m_pp.skills[skillid]; // don't allow further increase, this is believed to be AKurate behavior https://www.takproject.net/forums/index.php?threads/10-11-2023.26773/#post-123497
+				/*
 				Message(CC_Red, "Your spell casting specializations skills have been reset. "
 						"Only %i primary specialization skill is allowed.", MaxSpecializations);
 
@@ -2246,6 +2250,7 @@ uint16 Client::GetMaxSkillAfterSpecializationRules(EQ::skills::SkillType skillid
 
 				Log(Logs::General, Logs::Normal, "Reset %s's caster specialization skills to 1. "
 								"Too many specializations skills were above 50.", GetCleanName());
+				*/
 			}
 
 		}
@@ -2991,6 +2996,10 @@ void Client::LinkDead()
 	SendAppearancePacket(AT_Linkdead, 1);
 	client_distance_timer.Disable();
 	client_state = CLIENT_LINKDEAD;
+	if (IsSitting())
+	{
+		Stand();
+	}
 	AI_Start();
 	UpdateWho();
 	if(Trader)
@@ -3425,6 +3434,8 @@ int Client::GetAggroCount() {
 void Client::SummonAndRezzAllCorpses()
 {
 	PendingRezzXP = -1;
+	PendingRezzZoneID = 0;
+	PendingRezzZoneGuildID = 0;
 
 	auto Pack = new ServerPacket(ServerOP_DepopAllPlayersCorpses, sizeof(ServerDepopAllPlayersCorpses_Struct));
 
@@ -3432,6 +3443,7 @@ void Client::SummonAndRezzAllCorpses()
 
 	sdapcs->CharacterID = CharacterID();
 	sdapcs->ZoneID = zone->GetZoneID();
+	sdapcs->GuildID = zone->GetGuildID();
 
 	worldserver.SendPacket(Pack);
 
@@ -3439,7 +3451,7 @@ void Client::SummonAndRezzAllCorpses()
 
 	entity_list.RemoveAllCorpsesByCharID(CharacterID());
 
-	int CorpseCount = database.SummonAllCharacterCorpses(CharacterID(), zone->GetZoneID(), GetPosition());
+	int CorpseCount = database.SummonAllCharacterCorpses(CharacterID(), zone->GetZoneID(), zone->GetGuildID(), GetPosition());
 	if(CorpseCount <= 0)
 	{
 		Message(clientMessageYellow, "You have no corpses to summnon.");
@@ -3466,6 +3478,7 @@ void Client::SummonAllCorpses(const glm::vec4& position)
 
 	sdapcs->CharacterID = CharacterID();
 	sdapcs->ZoneID = zone->GetZoneID();
+	sdapcs->GuildID = zone->GetGuildID();
 
 	worldserver.SendPacket(Pack);
 
@@ -3473,7 +3486,7 @@ void Client::SummonAllCorpses(const glm::vec4& position)
 
 	entity_list.RemoveAllCorpsesByCharID(CharacterID());
 
-	database.SummonAllCharacterCorpses(CharacterID(), zone->GetZoneID(), summonLocation);
+	database.SummonAllCharacterCorpses(CharacterID(), zone->GetZoneID(), zone->GetGuildID(), summonLocation);
 }
 
 void Client::DepopAllCorpses()
@@ -3484,7 +3497,7 @@ void Client::DepopAllCorpses()
 
 	sdapcs->CharacterID = CharacterID();
 	sdapcs->ZoneID = zone->GetZoneID();
-
+	sdapcs->GuildID = zone->GetGuildID();
 	worldserver.SendPacket(Pack);
 
 	safe_delete(Pack);
@@ -3500,7 +3513,7 @@ void Client::DepopPlayerCorpse(uint32 dbid)
 
 	sdpcs->DBID = dbid;
 	sdpcs->ZoneID = zone->GetZoneID();
-
+	sdpcs->GuildID = zone->GetGuildID();
 	worldserver.SendPacket(Pack);
 
 	safe_delete(Pack);
@@ -4245,7 +4258,7 @@ void Client::Doppelganger(uint16 spell_id, Mob *target, const char *name_overrid
 		return;
 	}
 
-	SwarmPet_Struct pet;
+	SwarmPet_Struct pet = {};
 	pet.count = pet_count;
 	pet.duration = pet_duration;
 	pet.npc_id = record.npc_type;
@@ -5066,7 +5079,7 @@ void Client::RewindCommand()
 		Message(CC_Default, "You must wait before using #rewind again.");
 	}
 	else {
-		MovePC(zone->GetZoneID(), m_RewindLocation.x, m_RewindLocation.y, m_RewindLocation.z, 0, 2, Rewind);
+		MovePCGuildID(zone->GetZoneID(), zone->GetGuildID(), m_RewindLocation.x, m_RewindLocation.y, m_RewindLocation.z, 0, 2, Rewind);
 		rewind_timer.Start(30000, true);
 	}
 }
@@ -6554,4 +6567,141 @@ void Client::ShowLegacyItemsLooted(Client* to)
 	}	
 	to->Message(CC_Yellow, "======");
 
+}
+
+bool Client::IsLootLockedOutOfNPC(uint32 npctype_id)
+{
+	if (npctype_id == 0)
+		return false;
+
+	auto lootItr = loot_lockouts.find(npctype_id);
+
+	if (lootItr != loot_lockouts.end())
+		return lootItr->second.HasLockout(Timer::GetTimeSeconds());
+
+	return false;
+};
+
+std::vector<int> Client::GetMemmedSpells() {
+	std::vector<int> memmed_spells;
+	for (int index = 0; index < EQ::spells::SPELL_GEM_COUNT; index++) {
+		if (IsValidSpell(m_pp.mem_spells[index])) {
+			memmed_spells.push_back(m_pp.mem_spells[index]);
+		}
+	}
+	return memmed_spells;
+}
+
+std::vector<int> Client::GetScribeableSpells(uint8 min_level, uint8 max_level) {
+	bool SpellGlobalRule = RuleB(Spells, EnableSpellGlobals);
+	bool SpellGlobalCheckResult = false;
+	std::vector<int> scribeable_spells;
+	for (int spell_id = 0; spell_id < SPDAT_RECORDS; ++spell_id) {
+		bool scribeable = false;
+		if (!IsValidSpell(spell_id))
+			continue;
+		if (spells[spell_id].classes[WARRIOR] == 0)
+			continue;
+		if (max_level > 0 && spells[spell_id].classes[m_pp.class_ - 1] > max_level)
+			continue;
+		if (min_level > 1 && spells[spell_id].classes[m_pp.class_ - 1] < min_level)
+			continue;
+		if (spells[spell_id].skill == 52)
+			continue;
+		if (spells[spell_id].not_player_spell)
+			continue;
+		if (HasSpellScribed(spell_id))
+			continue;
+
+		if (SpellGlobalRule) {
+			SpellGlobalCheckResult = SpellGlobalCheck(spell_id, CharacterID());
+			if (SpellGlobalCheckResult) {
+				scribeable = true;
+			}
+		}
+		else {
+			scribeable = true;
+		}
+
+		if (scribeable) {
+			scribeable_spells.push_back(spell_id);
+		}
+	}
+	return scribeable_spells;
+}
+
+std::vector<int> Client::GetScribedSpells() {
+	std::vector<int> scribed_spells;
+	for (int index = 0; index < EQ::spells::SPELLBOOK_SIZE; index++) {
+		if (IsValidSpell(m_pp.spell_book[index])) {
+			scribed_spells.push_back(m_pp.spell_book[index]);
+		}
+	}
+	return scribed_spells;
+}
+
+void Client::SaveSpells()
+{
+	std::vector<CharacterSpellsRepository::CharacterSpells> character_spells = {};
+
+	for (int index = 0; index < EQ::spells::SPELLBOOK_SIZE; index++) {
+		if (IsValidSpell(m_pp.spell_book[index])) {
+			auto spell = CharacterSpellsRepository::NewEntity();
+			spell.id = CharacterID();
+			spell.slot_id = index;
+			spell.spell_id = m_pp.spell_book[index];
+			character_spells.emplace_back(spell);
+		}
+	}
+
+	CharacterSpellsRepository::DeleteWhere(database, fmt::format("id = {}", CharacterID()));
+
+	if (!character_spells.empty()) {
+		CharacterSpellsRepository::InsertMany(database, character_spells);
+	}
+}
+
+uint16 Client::ScribeSpells(uint8 min_level, uint8 max_level)
+{
+	int available_book_slot = GetNextAvailableSpellBookSlot();
+	std::vector<int> spell_ids = GetScribeableSpells(min_level, max_level);
+	uint16 spell_count = spell_ids.size();
+	uint16 scribed_spells = 0;
+	if (spell_count > 0) {
+		for (auto spell_id : spell_ids) {
+			if (available_book_slot == -1) {
+				Message(
+					CC_Red,
+					fmt::format(
+						"Unable to scribe {} ({}) to Spell Book because your Spell Book is full.",
+						spells[spell_id].name,
+						spell_id
+					).c_str()
+				);
+				break;
+			}
+
+			if (HasSpellScribed(spell_id)) {
+				continue;
+			}
+
+			// defer saving per spell and bulk save at the end
+			ScribeSpell(spell_id, available_book_slot, true, true);
+			available_book_slot = GetNextAvailableSpellBookSlot(available_book_slot);
+			scribed_spells++;
+		}
+	}
+
+	if (scribed_spells > 0) {
+		std::string spell_message = (
+			scribed_spells == 1 ?
+			"a new spell" :
+			fmt::format("{} new spells", scribed_spells)
+			);
+		Message(CC_Default, fmt::format("You have learned {}!", spell_message).c_str());
+
+		// bulk insert spells
+		SaveSpells();
+	}
+	return scribed_spells;
 }

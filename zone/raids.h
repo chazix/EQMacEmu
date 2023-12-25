@@ -59,9 +59,11 @@ struct RaidMember{
 	char membername[64];
 	Client *member;
 	uint32 GroupNumber;
+	uint32 guildid;
 	uint8 _class;
 	uint8 level;
 	bool IsGroupLeader;
+	bool IsGuildOfficer;
 	bool IsRaidLeader;
 	bool IsLooter;
 };
@@ -77,6 +79,9 @@ public:
 	bool IsLeader(Client *c) { return leader==c; }
 	bool IsLeader(const char* name) { return (strcmp(leadername, name)==0); }
 	void SetRaidLeader(const char *wasLead, const char *name);
+	uint32 GetLeaderGuildID();
+
+	inline bool GetEngageCachedResult() { return raid_engage_check_result;	}
 
 	bool	Process();
 	bool	IsRaid() { return true; }
@@ -97,6 +102,9 @@ public:
 	uint32	GetFreeGroup();
 	uint8	GroupCount(uint32 gid);
 	uint8	RaidCount();
+	uint32	GetPresentMembersFromGuildID(uint32 guild_id);
+	bool	IsGuildOfficerInRaidOfGuild(uint32 guild_id);
+	bool	CanRaidEngageRaidTarget(uint32 guild_id);
 	uint32	GetHighestLevel();
 	uint32	GetHighestLevel2();
 	uint32	GetLowestLevel();
@@ -108,6 +116,10 @@ public:
 	void	ChangeLootType(uint32 type);
 	void	AddRaidLooter(const char* looter);
 	void	RemoveRaidLooter(const char* looter);
+	bool	IsRaidLooter(const Client* c);
+	bool	IsRaidLeader(const Client* c);
+	bool	IsRaidLeaderOrLooter(const Client* c);
+	bool	IsRaidLeaderOrGroupLeader(const Client* c);
 
 	//util func
 	//keeps me from having to keep iterating through the list
@@ -155,6 +167,7 @@ public:
 	void	GroupUpdate(uint32 gid, bool initial = true);
 	void	GroupJoin(const char *who, uint32 gid, Client* exclude = nullptr, bool initial = false);
 	void	SendGroupJoin(Client* to, const char *who);
+	void	UpdateGuildRank(Client * update);
 	void	SendGroupUpdate(Client *to);
 	void	SendGroupLeader(uint32 gid, Client *to);
 	void	SendGroupDisband(Client *to);
@@ -170,11 +183,14 @@ public:
 
 	RaidMember members[MAX_RAID_MEMBERS];
 	char leadername[64];
+	uint32 currentleaderguildid;
+
 protected:
 	Client *leader;
 	uint32 LootType;
 	bool disbandCheck;
 	bool forceDisband;
+	bool raid_engage_check_result;
 };
 
 

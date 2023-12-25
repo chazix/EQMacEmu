@@ -89,10 +89,11 @@ Client::Client(EQStreamInterface* ieqs)
 	pwaitingforbootup = 0;
 	m_ClientVersionBit = 0;
 	numclients++;
+	zoneGuildID = 0xFFFFFFFF;
 }
 
 Client::~Client() {
-	if (RunLoops && cle && zoneID == 0) {
+	if (RunLoops && cle && zoneID == 0 && zoneGuildID == 0xFFFFFFFF) {
 		cle->SetOnline(CLE_Status_Offline);
 	}
 
@@ -275,7 +276,7 @@ bool Client::HandleSendLoginInfoPacket(const EQApplicationPacket *app) {
 			uint32 tmpaccid = 0;
 			uint64 tmpdeathtime = 0;
 			database.GetLiveCharByLSID(id, char_name);
-			charid = database.GetCharacterInfo(char_name, &tmpaccid, &zoneID, 0, 0, 0, &tmpdeathtime);
+			charid = database.GetCharacterInfo(char_name, &tmpaccid, &zoneID, &zoneGuildID, 0, 0, 0, &tmpdeathtime);
 			if (charid == 0 || tmpdeathtime != 0 || tmpaccid != GetAccountID()) {
 				Log(Logs::Detail, Logs::WorldServer, "Could not get CharInfo for '%s'", char_name);
 				eqs->Close();
@@ -500,7 +501,7 @@ bool Client::HandleEnterWorldPacket(const EQApplicationPacket *app) {
 
 	uint32 tmpaccid = 0;
 	uint64 tmpdeathtime = 0;
-	charid = database.GetCharacterInfo(char_name, &tmpaccid, &zoneID, 0, 0, 0, &tmpdeathtime);
+	charid = database.GetCharacterInfo(char_name, &tmpaccid, &zoneID, &zoneGuildID, 0, 0, 0, &tmpdeathtime);
 	if (charid == 0 || tmpaccid != GetAccountID()) {
 		Log(Logs::Detail, Logs::WorldServer, "Could not get CharInfo for '%s'", char_name);
 		eqs->Close();
@@ -531,6 +532,7 @@ bool Client::HandleEnterWorldPacket(const EQApplicationPacket *app) {
 			ServerGroupLeave_Struct* gl = (ServerGroupLeave_Struct*)pack->pBuffer;
 			gl->gid = groupid;
 			gl->zoneid = 0;
+			gl->zoneguildid = 0xFFFFFFFF;
 			strcpy(gl->member_name, char_name);
 			gl->checkleader = true;
 
@@ -547,6 +549,7 @@ bool Client::HandleEnterWorldPacket(const EQApplicationPacket *app) {
 			auto pack = new ServerPacket(ServerOP_RaidRemoveLD, sizeof(ServerRaidGeneralAction_Struct));
 			ServerRaidGeneralAction_Struct *rga = (ServerRaidGeneralAction_Struct*)pack->pBuffer;
 			rga->rid = 0;
+			rga->zoneguildid = 0xFFFFFFFF;
 
 			std::string query = StringFormat("SELECT groupid, isgroupleader, israidleader, islooter "
 				"FROM raid_members WHERE name='%s' and raidid=%lu",
@@ -914,7 +917,7 @@ void Client::EnterWorld(bool TryBootup) {
 		return;
 
 	ZoneServer* zs = nullptr;
-	zs = zoneserver_list.FindByZoneID(zoneID);
+	zs = zoneserver_list.FindByZoneID(zoneID, zoneGuildID);
 
 	if (zs) {
 		// warn the world we're comming, so it knows not to shutdown
@@ -922,10 +925,10 @@ void Client::EnterWorld(bool TryBootup) {
 	}
 	else
 	{
-		if (TryBootup && !RuleB(World, DontBootDynamics)) {
-			Log(Logs::Detail, Logs::WorldServer, "Attempting autobootup of (%d)", zoneID);
+		if (TryBootup && !RuleB(World, DontBootDynamics) && zoneGuildID != 0xFFFFFFFF) {
+			Log(Logs::Detail, Logs::WorldServer, "Attempting autobootup of (%d) (%d)", zoneID, zoneGuildID);
 			autobootup_timeout.Start();
-			pwaitingforbootup = zoneserver_list.TriggerBootup(zoneID);
+			pwaitingforbootup = zoneserver_list.TriggerBootup(zoneID, zoneGuildID);
 			if (pwaitingforbootup == 0) {
 				Log(Logs::Detail, Logs::WorldServer,"No zoneserver available to boot up.");
 				ZoneUnavail();
@@ -933,7 +936,7 @@ void Client::EnterWorld(bool TryBootup) {
 			return;
 		}
 		else {
-			Log(Logs::Detail, Logs::WorldServer, "Requested zone %d is not running.", zoneID);
+			Log(Logs::Detail, Logs::WorldServer, "Requested zone %d (%d) is not running.", zoneID, zoneGuildID);
 			ZoneUnavail();
 			return;
 		}
@@ -949,7 +952,7 @@ void Client::EnterWorld(bool TryBootup) {
 	database.CharacterJoin(charid, char_name);
 	database.UpdateLiveChar(char_name, GetAccountID());
 
-	Log(Logs::Detail, Logs::WorldServer, "%s (%d)", seencharsel ? "Entering zone" : "Zoning to", zoneID);
+	Log(Logs::Detail, Logs::WorldServer, "%s (%d : %d)", seencharsel ? "Entering zone" : "Zoning to", zoneID, zoneGuildID);
 //	database.SetAuthentication(account_id, char_name, zone_name, ip);
 
 	if (seencharsel) {
@@ -979,7 +982,7 @@ void Client::EnterWorld(bool TryBootup) {
 void Client::Clearance(int8 response)
 {
 	ZoneServer* zs = nullptr;
-	zs = zoneserver_list.FindByZoneID(zoneID);
+	zs = zoneserver_list.FindByZoneID(zoneID, zoneGuildID);
 
 	if(zs == 0 || response == -1 || response == 0)
 	{
@@ -1149,7 +1152,7 @@ bool Client::OPCharCreate(char *name, CharCreate_Struct *cc)
 	Log(Logs::Detail, Logs::WorldServer, "Beard: %d  Beardcolor: %d", cc->beard, cc->beardcolor);
 
 	/* Validate the char creation struct */
-		if(!CheckCharCreateInfo(cc)) {
+		if(!Client::CheckCharCreateInfo(cc)) {
 			Log(Logs::Detail, Logs::WorldServer,"CheckCharCreateInfo did not validate the request (bad race/class/stats)");
 			return false;
 		}
@@ -1262,14 +1265,14 @@ bool Client::OPCharCreate(char *name, CharCreate_Struct *cc)
 }
 
 // returns true if the request is ok, false if there's an error
-bool CheckCharCreateInfo(CharCreate_Struct *cc)
+bool Client::CheckCharCreateInfo(CharCreate_Struct *cc)
 {
 	if (!cc)
 		return false;
 
 	Log(Logs::Detail, Logs::WorldServer, "Validating char creation info...");
 
-	int currentExpansions = RuleI(Character, DefaultExpansions);
+	int currentExpansions = GetExpansion(); // Get expansion value from account table
 
 	RaceClassCombos class_combo;
 	bool found = false;
@@ -1279,7 +1282,7 @@ bool CheckCharCreateInfo(CharCreate_Struct *cc)
 				character_create_race_class_combos[i].Race == cc->race &&
 				character_create_race_class_combos[i].Deity == cc->deity &&
 				character_create_race_class_combos[i].Zone == cc->start_zone &&
-			(currentExpansions & character_create_race_class_combos[i].ExpansionRequired == character_create_race_class_combos[i].ExpansionRequired || character_create_race_class_combos[i].ExpansionRequired == 0)) {
+			((currentExpansions & character_create_race_class_combos[i].ExpansionRequired) == character_create_race_class_combos[i].ExpansionRequired || character_create_race_class_combos[i].ExpansionRequired == 0)) {
 			class_combo = character_create_race_class_combos[i];
 			found = true;
 			break;

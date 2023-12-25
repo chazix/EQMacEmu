@@ -157,7 +157,6 @@ SET(zone_headers
 	pets.h
 	position.h
 	qglobals.h
-	quest_interface.h
 	queryserv.h
 	quest_interface.h
 	questmgr.h
@@ -186,6 +185,12 @@ ENDIF(EQEMU_DEPOP_INVALIDATES_CACHE)
 ADD_EXECUTABLE(zone ${zone_sources} ${zone_headers})
 
 INSTALL(TARGETS zone RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+
+IF (WIN32 AND EQEMU_BUILD_PCH)
+    TARGET_PRECOMPILE_HEADERS(zone PRIVATE ../common/pch/pch.h)
+    TARGET_PRECOMPILE_HEADERS(zone PRIVATE ../common/types.h ../common/eqemu_logsys.h ../common/eqemu_logsys_log_aliases.h ../common/features.h ../common/global_define.h)
+    TARGET_PRECOMPILE_HEADERS(zone PRIVATE mob.h corpse.h npc.h doors.h entity.h client.h zone.h)
+ENDIF()
 
 ADD_DEFINITIONS(-DZONE)
 

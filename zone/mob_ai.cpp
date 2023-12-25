@@ -616,12 +616,9 @@ void NPC::AI_Start() {
 	} else {
 		AIautocastspell_timer = std::unique_ptr<Timer>(new Timer(750));
 	}
-
-	if (NPCTypedata) {
-		AI_AddNPCSpells(NPCTypedata->npc_spells_id);
-		ProcessSpecialAbilities(NPCTypedata->special_abilities);
-		AI_AddNPCSpellsEffects(NPCTypedata->npc_spells_effects_id);
-	}
+	AI_AddNPCSpells(NPCTypedata.npc_spells_id);
+	ProcessSpecialAbilities(NPCTypedata.special_abilities);
+	AI_AddNPCSpellsEffects(NPCTypedata.npc_spells_effects_id);
 	SendTo(GetX(), GetY(), GetZ());
 	SaveGuardSpot();
 	AI_SetLoiterTimer();
@@ -1668,8 +1665,9 @@ void Mob::AI_Process() {
 				else if (!IsBlind())
 				{
 					//could not summon them, check ranged...
-					if(GetSpecialAbility(SPECATK_RANGED_ATK))
+					if (GetSpecialAbility(SPECATK_RANGED_ATK) || HasBowAndArrowEquipped()) {
 						doranged = true;
+					}
 
 					// Now pursue
 					if (AI_EngagedCastCheck()) {
@@ -2544,6 +2542,25 @@ void Mob::AI_Event_NoLongerEngaged() {
 				CastToNPC()->SetCombatEvent(false);
 			}
 		}
+
+		if (zone && zone->GetGuildID() != GUILD_NONE)
+		{
+			if (GetSpecialAbility(TETHER)) {
+
+				auto npcSpawnPoint = CastToNPC()->GetSpawnPoint();
+				GMMove(npcSpawnPoint.x, npcSpawnPoint.y, npcSpawnPoint.z, npcSpawnPoint.w);
+			}
+
+			else if (GetSpecialAbility(LEASH)) {
+				auto npcSpawnPoint = CastToNPC()->GetSpawnPoint();
+				GMMove(npcSpawnPoint.x, npcSpawnPoint.y, npcSpawnPoint.z, npcSpawnPoint.w);
+				SetHP(GetMaxHP());
+				BuffFadeAll();
+				WipeHateList(true);
+				AIloiter_timer->Trigger();
+				return;
+			}
+		}
 	}
 }
 
@@ -3097,7 +3114,7 @@ void NPC::CheckSignal()
 		buf[31] = '\0';
 		if (!signal_data.empty())
 		{
-			std::vector<EQ::Any> info_ptrs;
+			std::vector<std::any> info_ptrs;
 			info_ptrs.push_back(&signal_data);
 			parse->EventNPC(EVENT_SIGNAL, this, nullptr, buf, 0, &info_ptrs);
 		}

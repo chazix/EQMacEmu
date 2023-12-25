@@ -314,7 +314,7 @@ Mob* QuestManager::spawn_from_spawn2(uint32 spawn2_id)
 			}
 		}
 
-		database.UpdateRespawnTime(spawn2_id, 0);
+		database.UpdateRespawnTime(spawn2_id, 0, zone ? zone->GetGuildID() : GUILD_NONE);
 		found_spawn->SetCurrentNPCID(npcid);
 
         auto position = glm::vec4(found_spawn->GetX(), found_spawn->GetY(), found_spawn->GetZ(), found_spawn->GetHeading());
@@ -394,7 +394,9 @@ void QuestManager::Zone(const char *zone_name) {
 		ZoneToZone_Struct* ztz = (ZoneToZone_Struct*) pack->pBuffer;
 		ztz->response = 0;
 		ztz->current_zone_id = zone->GetZoneID();
+		ztz->current_zone_guild_id = zone->GetGuildID();
 		ztz->requested_zone_id = database.GetZoneID(zone_name);
+		ztz->requested_zone_guild_id = GUILD_NONE;
 		ztz->admin = initiator->Admin();
 		strcpy(ztz->name, initiator->GetName());
 		ztz->guild_id = initiator->GuildID();
@@ -930,7 +932,7 @@ std::string QuestManager::getconsiderlevelname(uint8 consider_level) {
 void QuestManager::safemove() {
 	QuestManagerCurrentQuestVars();
 	if (initiator && initiator->IsClient())
-		initiator->GoToSafeCoords(zone->GetZoneID());
+		initiator->GoToSafeCoords(zone->GetZoneID(), zone->GetGuildID());
 }
 
 void QuestManager::rain(int weather) {
@@ -995,45 +997,7 @@ void QuestManager::permagender(int gender_id) {
 
 uint16 QuestManager::scribespells(uint8 max_level, uint8 min_level) {
 	QuestManagerCurrentQuestVars();
-	uint16 book_slot, count;
-	uint16 curspell;
-
-	uint32 Char_ID = initiator->CharacterID();
-	bool SpellGlobalRule = RuleB(Spells, EnableSpellGlobals);
-	bool SpellGlobalCheckResult = 0;
-
-
-	for(curspell = 0, book_slot = initiator->GetNextAvailableSpellBookSlot(), count = 0; curspell < SPDAT_RECORDS && book_slot < MAX_PP_SPELLBOOK; curspell++, book_slot = initiator->GetNextAvailableSpellBookSlot(book_slot))
-	{
-		if
-		(
-			spells[curspell].classes[WARRIOR] != 0 &&       //check if spell exists
-			spells[curspell].classes[initiator->GetPP().class_-1] <= max_level &&   //maximum level
-			spells[curspell].classes[initiator->GetPP().class_-1] >= min_level &&   //minimum level
-			spells[curspell].skill != 52 &&
-			spells[curspell].effectid[EFFECT_COUNT - 1] != 10 &&
-			!spells[curspell].not_player_spell
-		)
-		{
-			if (book_slot == -1) //no more book slots
-				break;
-			if(!initiator->HasSpellScribed(curspell)) { //we don't already have it scribed
-				if (SpellGlobalRule) {
-					// Bool to see if the character has the required QGlobal to scribe it if one exists in the Spell_Globals table
-					SpellGlobalCheckResult = initiator->SpellGlobalCheck(curspell, Char_ID);
-					if (SpellGlobalCheckResult) {
-						initiator->ScribeSpell(curspell, book_slot);
-						count++;
-					}
-				}
-				else {
-					initiator->ScribeSpell(curspell, book_slot);
-					count++;
-				}
-			}
-		}
-	}
-	return count; //how many spells were scribed successfully
+	return initiator->ScribeSpells(min_level, max_level);
 }
 
 void QuestManager::unscribespells() {
@@ -1258,7 +1222,7 @@ void QuestManager::CreateGuild(const char *guild_name, const char *leader) {
 
 void QuestManager::settime(uint8 new_hour, uint8 new_min) {
 	if (zone)
-		zone->SetTime(new_hour + 1, new_min);
+		zone->SetTime(new_hour, new_min);
 }
 
 void QuestManager::itemlink(int item_id) {
@@ -1726,7 +1690,7 @@ bool QuestManager::summonburriedplayercorpse(uint32 char_id, const glm::vec4& po
 	if(char_id <= 0)
         return false;
 
-	Corpse* PlayerCorpse = database.SummonBuriedCharacterCorpses(char_id, zone->GetZoneID(), position);
+	Corpse* PlayerCorpse = database.SummonBuriedCharacterCorpses(char_id, zone->GetZoneID(), zone->GetGuildID(), position);
 	if(!PlayerCorpse)
 		return false;
 
@@ -1969,8 +1933,8 @@ void QuestManager::clearspawntimers() {
 	iterator.Reset();
 	while (iterator.MoreElements()) {
 		std::string query = StringFormat("DELETE FROM respawn_times "
-                                        "WHERE id = %lu",
-                                        (unsigned long)iterator.GetData()->GetID());
+                                        "WHERE id = %lu and guild_id = %lu",
+                                        (unsigned long)iterator.GetData()->GetID(), (unsigned long)zone->GetGuildID());
         auto results = database.QueryDatabase(query);
 		iterator.Advance();
 	}
@@ -2111,7 +2075,7 @@ void QuestManager::UpdateSpawnTimer(uint32 id, uint32 newTime)
 {
 	bool found = false;
 
-	database.UpdateRespawnTime(id, (newTime/1000));
+	database.UpdateRespawnTime(id, (newTime/1000), zone ? zone->GetGuildID() : GUILD_NONE);
 	LinkedListIterator<Spawn2*> iterator(zone->spawn2_list);
 	iterator.Reset();
 	while (iterator.MoreElements())

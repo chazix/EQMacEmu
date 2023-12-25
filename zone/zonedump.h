@@ -130,6 +130,7 @@ struct NPCType
 	bool	engage_notice;
 	int8	stuck_behavior;
 	int8	flymode;
+	uint32	loot_lockout;
 };
 
 struct PlayerCorpse_Struct {
@@ -161,6 +162,7 @@ struct PlayerCorpse_Struct {
 	uint8 killedby;
 	bool  rezzable;
 	uint32	rez_time;
+	uint32	zone_guild_id;
 	uint32 time_of_death;
 	ServerLootItem_Struct	items[0];
 	//std::list<player_lootitem::ServerLootItem_Struct*> items;
@@ -169,7 +171,7 @@ struct PlayerCorpse_Struct {
 struct Door {
 	uint32	db_id;
 	uint8	door_id;
-	char	zone_name[16];
+	char	zone_name[32];
 	char	door_name[32];
 	float	pos_x;
 	float	pos_y;
@@ -195,6 +197,7 @@ struct Door {
 	bool	islift;
 	uint8   close_time;
 	bool	can_open;
+	bool	guildzonedoor;
 };
 
 #pragma pack()

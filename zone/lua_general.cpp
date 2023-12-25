@@ -62,7 +62,7 @@ void load_encounter_with_data(std::string name, std::string info_str) {
 	entity_list.AddEncounter(enc);
 	lua_encounters[name] = enc;
 	lua_encounters_loaded[name] = true;
-	std::vector<EQ::Any> info_ptrs;
+	std::vector<std::any> info_ptrs;
 	info_ptrs.push_back(&info_str);
 	parse->EventEncounter(EVENT_ENCOUNTER_LOAD, name, "", 0, &info_ptrs);
 }
@@ -124,7 +124,7 @@ void unload_encounter_with_data(std::string name, std::string info_str) {
 	lua_encounters[name]->Depop();
 	lua_encounters.erase(name);
 	lua_encounters_loaded.erase(name);
-	std::vector<EQ::Any> info_ptrs;
+	std::vector<std::any> info_ptrs;
 	info_ptrs.push_back(&info_str);
 	parse->EventEncounter(EVENT_ENCOUNTER_UNLOAD, name, "", 0, &info_ptrs);
 }
@@ -809,6 +809,13 @@ int lua_get_zone_id() {
 	return zone->GetZoneID();
 }
 
+int lua_get_zone_guild_id() {
+	if (!zone)
+		return 0;
+
+	return (int)zone->GetGuildID();
+}
+
 const char *lua_get_zone_long_name() {
 	if(!zone)
 		return "";
@@ -835,9 +842,9 @@ luabind::adl::object lua_get_zone_time(lua_State *L) {
 	zone->zone_time.getEQTimeOfDay(time(0), &eqTime);
 
 	luabind::adl::object ret = luabind::newtable(L);
-	ret["zone_hour"] = eqTime.hour - 1;
+	ret["zone_hour"] = eqTime.hour;
 	ret["zone_minute"] = eqTime.minute;
-	ret["zone_time"] = (eqTime.hour - 1) * 100 + eqTime.minute;
+	ret["zone_time"] = (eqTime.hour) * 100 + eqTime.minute;
 	return ret;
 }
 
@@ -1275,6 +1282,7 @@ void lua_create_npc(luabind::adl::object table, float x, float y, float z, float
 	LuaCreateNPCParse(raid_target, bool, false);
 	LuaCreateNPCParse(probability, uint8, 0);
 	LuaCreateNPCParse(engage_notice, bool, false);
+	LuaCreateNPCParse(loot_lockout, uint32, false);
 	NPC* npc = new NPC(npc_type, nullptr, glm::vec4(x, y, z, heading), EQ::constants::GravityBehavior::Water);
 	entity_list.AddNPC(npc);
 }
@@ -1428,6 +1436,7 @@ luabind::scope lua_register_general() {
 		luabind::def("get_qglobals", (luabind::adl::object(*)(lua_State*))&lua_get_qglobals),
 		luabind::def("get_entity_list", &lua_get_entity_list),
 		luabind::def("get_zone_id", &lua_get_zone_id),
+		luabind::def("get_zone_guild_id", &lua_get_zone_guild_id),
 		luabind::def("get_zone_long_name", &lua_get_zone_long_name),
 		luabind::def("get_zone_short_name", &lua_get_zone_short_name),
 		luabind::def("get_zone_weather", &lua_get_zone_weather),

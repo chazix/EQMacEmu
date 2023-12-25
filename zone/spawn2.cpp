@@ -261,16 +261,16 @@ bool Spawn2::Process() {
 
 		// ignoring spawnpoint loc and using random loc for large outdoor zones; roambox NPCs are not supposed to be campable
 		// a bit hackish but works
-		bool open_outdoor_zone = (!zone->CanCastDungeon() && !zone->IsCity()) || qeynos2 || freporte || freportw || gfaydark;
-		if (open_outdoor_zone == kael || open_outdoor_zone == mischiefplane)
-			open_outdoor_zone = false;
+		bool open_outdoor_zone = (!zone->CanCastDungeon() && !zone->IsCity()) || zone->GetZoneID() == qeynos2 || zone->GetZoneID() == freporte || zone->GetZoneID() == freportw || zone->GetZoneID() == gfaydark;
 
-		if (rand_spawn || (spawn_group->roamdist && open_outdoor_zone))
-		{
+		if (open_outdoor_zone == zone->GetZoneID() == kael || open_outdoor_zone == zone->GetZoneID() == mischiefplane) {
+			open_outdoor_zone = false;
+		}
+
+		if (rand_spawn || (spawn_group->roamdist && open_outdoor_zone))	{
 			uint8 count = 0;
 			z = BEST_Z_INVALID;
-			while (z == BEST_Z_INVALID && count < 3)
-			{
+			while (z == BEST_Z_INVALID && count < 3) {
 				x = zone->random.Real(spawn_group->roambox[1], spawn_group->roambox[0]);
 				y = zone->random.Real(spawn_group->roambox[3], spawn_group->roambox[2]);
 				glm::vec3 loc(x, y, 0);
@@ -278,8 +278,7 @@ bool Spawn2::Process() {
 				++count;
 			}
 
-			if (z == BEST_Z_INVALID)
-			{
+			if (z == BEST_Z_INVALID) {
 				Log(Logs::General, Logs::Error, "Invalid BestZ for random spawn %d", spawn2_id);
 				timer.Start(60000);	// try again later
 				return false;
@@ -491,13 +490,13 @@ void Spawn2::DeathReset(bool realdeath)
 	//if we have a valid spawn id
 	if(spawn2_id)
 	{
-		database.UpdateRespawnTime(spawn2_id, (cur/1000));
+		database.UpdateRespawnTime(spawn2_id, (cur/1000), zone ? zone->GetGuildID() : GUILD_NONE);
 		Log(Logs::General, Logs::Spawns, "Spawn2 %d: Spawn reset by death, repop in %d ms", spawn2_id, timer.GetRemainingTime());
 		//store it to database too
 	}
 }
 
-bool ZoneDatabase::PopulateZoneSpawnListClose(uint32 zoneid, LinkedList<Spawn2*> &spawn2_list, const glm::vec4& client_position, uint32 repop_distance)
+bool ZoneDatabase::PopulateZoneSpawnListClose(uint32 zoneid, LinkedList<Spawn2*> &spawn2_list, const glm::vec4& client_position, uint32 repop_distance, uint32 guildid)
 {
 	std::unordered_map<uint32, uint32> spawn_times;
 
@@ -512,7 +511,7 @@ bool ZoneDatabase::PopulateZoneSpawnListClose(uint32 zoneid, LinkedList<Spawn2*>
 		"respawn_times.`start`, "
 		"respawn_times.duration "
 		"FROM "
-		"respawn_times"
+		"respawn_times WHERE respawn_times.guild_id = %lu", (unsigned long)guildid
 		);
 	auto results = QueryDatabase(spawn_query);
 	for (auto row = results.begin(); row != results.end(); ++row) {
@@ -604,7 +603,7 @@ bool ZoneDatabase::PopulateZoneSpawnListClose(uint32 zoneid, LinkedList<Spawn2*>
 	return true;
 }
 
-bool ZoneDatabase::PopulateZoneSpawnList(uint32 zoneid, LinkedList<Spawn2*> &spawn2_list) {
+bool ZoneDatabase::PopulateZoneSpawnList(uint32 zoneid, LinkedList<Spawn2*> &spawn2_list, uint32 guildid) {
 
 	std::unordered_map<uint32, uint32> spawn_times;
 
@@ -620,7 +619,7 @@ bool ZoneDatabase::PopulateZoneSpawnList(uint32 zoneid, LinkedList<Spawn2*> &spa
 		"respawn_times.`start`, "
 		"respawn_times.duration "
 		"FROM "
-		"respawn_times"
+		"respawn_times WHERE respawn_times.guild_id = %lu", (unsigned long)guildid
 	);
 	auto results = QueryDatabase(spawn_query);
 	for (auto row = results.begin(); row != results.end(); ++row) {
@@ -703,7 +702,7 @@ bool ZoneDatabase::PopulateZoneSpawnList(uint32 zoneid, LinkedList<Spawn2*> &spa
 	return true;
 }
 
-bool ZoneDatabase::PopulateRandomZoneSpawnList(uint32 zoneid, LinkedList<Spawn2*> &spawn2_list) 
+bool ZoneDatabase::PopulateRandomZoneSpawnList(uint32 zoneid, LinkedList<Spawn2*> &spawn2_list, uint32 guild_id) 
 {
 	const char *zone_name = database.GetZoneName(zoneid);
 	uint32 next_id = RANDOM_SPAWNID + (zoneid * 1000);
@@ -767,7 +766,7 @@ bool ZoneDatabase::PopulateRandomZoneSpawnList(uint32 zoneid, LinkedList<Spawn2*
 		// Since we have no way of knowing what the spawn2 id is at this point, we need to
 		// clear any respawn timers whenever this method is called (zone bootup, #repop, #reloadworld)
 		std::string query = StringFormat(
-			"DELETE FROM respawn_times WHERE id >= %d && id <= %d", next_id, next_id + 999);
+			"DELETE FROM respawn_times WHERE id >= %d && id <= %d and guild_id = %u", next_id, next_id + 999, guild_id);
 		auto results1 = database.QueryDatabase(query);
 
 		Log(Logs::General, Logs::Status, "%d random box spawns found and loaded!", count);
@@ -859,7 +858,7 @@ void Spawn2::SpawnConditionChanged(const SpawnCondition &c, int16 old_value) {
 			npcthis = nullptr;
 		}
 		if(new_state) { // only get repawn timer remaining when the SpawnCondition is enabled.
-			timer_remaining = database.GetSpawnTimeLeft(spawn2_id);
+			timer_remaining = database.GetSpawnTimeLeft(spawn2_id, zone ? zone->GetGuildID() : GUILD_NONE);
 			Log(Logs::Detail, Logs::Spawns,"Spawn2 %d: Our condition is now %s. The respawn timer_remaining is %d. Forcing a repop if it is <= 0.", spawn2_id, new_state?"enabled":"disabled", timer_remaining);
 			if(timer_remaining <= 0)
 				Repop();
@@ -1516,7 +1515,7 @@ bool SpawnConditionManager::Check(uint16 condition, int16 min_value) {
 	return(cond.value >= min_value);
 }
 
-void ZoneDatabase::UpdateRespawnTime(uint32 spawn2_id, uint32 time_left)
+void ZoneDatabase::UpdateRespawnTime(uint32 spawn2_id, uint32 time_left, uint32 guild_id)
 {
 
 	timeval tv;
@@ -1528,7 +1527,7 @@ void ZoneDatabase::UpdateRespawnTime(uint32 spawn2_id, uint32 time_left)
 	*/
 
 	if (time_left == 0) {
-		std::string query = StringFormat("DELETE FROM `respawn_times` WHERE `id` = %u", spawn2_id);
+		std::string query = StringFormat("DELETE FROM `respawn_times` WHERE `id` = %u and guild_id = %lu", spawn2_id, guild_id);
 		QueryDatabase(query);
 
 		return;
@@ -1537,13 +1536,16 @@ void ZoneDatabase::UpdateRespawnTime(uint32 spawn2_id, uint32 time_left)
 	std::string query = StringFormat(
 		"REPLACE INTO `respawn_times` "
 		"(id, "
+		"guild_id, "
 		"start, "
 		"duration) "
 		"VALUES "
 		"(%u, "
 		"%u, "
+		"%u, "
 		"%u)",
 		spawn2_id,
+		guild_id,
 		current_time,
 		time_left
 	);
@@ -1553,11 +1555,11 @@ void ZoneDatabase::UpdateRespawnTime(uint32 spawn2_id, uint32 time_left)
 }
 
 //Gets the respawn time left in the database for the current spawn id
-uint32 ZoneDatabase::GetSpawnTimeLeft(uint32 id)
+uint32 ZoneDatabase::GetSpawnTimeLeft(uint32 id, uint32 guild_id)
 {
 	std::string query = StringFormat("SELECT start, duration FROM respawn_times "
-		"WHERE id = %lu",
-		(unsigned long)id);
+		"WHERE id = %lu AND guild_id = %lu",
+		(unsigned long)id, (unsigned long)guild_id);
 	auto results = QueryDatabase(query);
 	if (!results.Success()) {
 		return 0;
@@ -1586,7 +1588,7 @@ uint32 ZoneDatabase::GetSpawnTimeLeft(uint32 id)
 
 void ZoneDatabase::UpdateSpawn2Status(uint32 id, uint8 new_status)
 {
-	std::string query = StringFormat("UPDATE spawn2 SET enabled = %i WHERE id = %lu", new_status, (unsigned long)id);
+	std::string query = StringFormat("UPDATE spawn2 SET enabled = %i WHERE id = %lu and guild_id = %i", new_status, (unsigned long)id);
 	QueryDatabase(query);
 }
 
@@ -1605,7 +1607,7 @@ uint16 Zone::GetAvailPointCount(SpawnGroup* sg)
 		if (cur->SpawnGroupID() == id && sp2id != skipped_spawn2 && cur->npcthis == nullptr)
 		{
 			bool reset = sg->group_spawn_limit == 1;
-			uint32 timeleft = reset ? 0 : database.GetSpawnTimeLeft(sp2id);
+			uint32 timeleft = reset ? 0 : database.GetSpawnTimeLeft(sp2id, zone->GetGuildID());
 
 			// We don't want to count the points waiting to spawn.
 			if (timeleft == 0 || reset)
@@ -1651,7 +1653,7 @@ void Zone::UpdateGroupTimers(SpawnGroup* sg, uint32 newtimer_id)
 		if (cur->SpawnGroupID() == id && cur->npcthis == nullptr)
 		{
 			bool reset = spawn_limit == 1;
-			uint32 timeleft = reset ? 0 : database.GetSpawnTimeLeft(sp2id);
+			uint32 timeleft = reset ? 0 : database.GetSpawnTimeLeft(sp2id, GetGuildID());
 
 			// We don't want to update the timer of points waiting to spawn.
 			if (timeleft == 0 || reset)
@@ -1712,7 +1714,7 @@ uint16 Zone::GetGroupActiveTimers(uint32 spawngroupid, uint32& remaining_time_id
 		{
 			// We hit the db to see if they are waiting to spawn. The timer in memory cannot tell us, because it is reset 
 			// whenever we fail to spawn a NPC from that spawnpoint. (In this case due to the spawngroup limit.)
-			uint32 timeleft = database.GetSpawnTimeLeft(cur->GetID());
+			uint32 timeleft = database.GetSpawnTimeLeft(cur->GetID(), GetGuildID());
 			if (timeleft > 0)
 			{
 				// Now that we know this NPC was recently despawned, we want to use the time left in memory for the pointer value, 

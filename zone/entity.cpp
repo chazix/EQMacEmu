@@ -1771,7 +1771,7 @@ void EntityList::QueueClientsStatus(Mob *sender, const EQApplicationPacket *app,
 void EntityList::DuelMessage(Mob *winner, Mob *loser, bool flee)
 {
 	if (winner->GetLevelCon(winner->GetLevel(), loser->GetLevel()) > 2) {
-		std::vector<EQ::Any> args;
+		std::vector<std::any> args;
 		args.push_back(winner);
 		args.push_back(loser);
 
@@ -3191,7 +3191,7 @@ void EntityList::ClearFeignAggro(Mob *targ)
 
 			if (targ->IsClient())
 			{
-				std::vector<EQ::Any> args;
+				std::vector<std::any> args;
 				args.push_back(it->second);
 				int i = parse->EventPlayer(EVENT_FEIGN_DEATH, targ->CastToClient(), "", 0, &args);
 				if (i != 0) {
@@ -3525,10 +3525,10 @@ void EntityList::ProcessMove(Client *c, const glm::vec3& location)
 	for (auto iter = events.begin(); iter != events.end(); ++iter) {
 		quest_proximity_event& evt = (*iter);
 		if (evt.npc) {
-			std::vector<EQ::Any> args;
+			std::vector<std::any> args;
 			parse->EventNPC(evt.event_id, evt.npc, evt.client, "", 0, &args);
 		} else {
-			std::vector<EQ::Any> args;
+			std::vector<std::any> args;
 			args.push_back(&evt.area_id);
 			args.push_back(&evt.area_type);
 			parse->EventPlayer(evt.event_id, evt.client, "", 0, &args);
@@ -3585,7 +3585,7 @@ void EntityList::ProcessMove(NPC *n, float x, float y, float z)
 
 	for (auto iter = events.begin(); iter != events.end(); ++iter) {
 		quest_proximity_event& evt = (*iter);
-		std::vector<EQ::Any> args;
+		std::vector<std::any> args;
 		args.push_back(&evt.area_id);
 		args.push_back(&evt.area_type);
 		parse->EventNPC(evt.event_id, evt.npc, evt.client, "", 0, &args);
@@ -4085,6 +4085,11 @@ void EntityList::GroupMessage(uint32 gid, const char *from, const char *message,
 
 uint16 EntityList::CreateGroundObject(uint32 itemid, const glm::vec4& position, uint32 decay_time)
 {
+	if (zone && zone->GetGuildID() != GUILD_NONE)
+	{
+		return 0;
+	}
+
 	const EQ::ItemData *is = database.GetItem(itemid);
 	if (!is)
 		return 0;
@@ -5200,6 +5205,22 @@ bool EntityList::HasCharmedNPC()
 		++it;
 	}
 	return false;
+}
+
+
+void EntityList::EvacAllPlayers()
+{
+
+	// update distances to us for clients.
+	auto it = client_list.begin();
+	// go through the list and update distances
+	while (it != client_list.end()) {
+		if (it->second && it->second->GetID() > 0) {
+
+			it->second->MovePCGuildID(zone->GetZoneID(), GUILD_NONE, 0, 0, 0, 0, 0, EvacToSafeCoords);
+		}
+		++it;
+	}
 }
 
 void EntityList::ReportUnderworldNPCs(Client* sendto, float min_z)

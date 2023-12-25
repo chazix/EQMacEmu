@@ -65,7 +65,7 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, int buffslot, int caster_lev
 
 	if(IsNPC())
 	{
-		std::vector<EQ::Any> args;
+		std::vector<std::any> args;
 		args.push_back(&buffslot);
 		int i = parse->EventSpell(EVENT_SPELL_EFFECT_NPC, CastToNPC(), nullptr, spell_id, caster ? caster->GetID() : 0, &args);
 		if(i != 0){
@@ -75,7 +75,7 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, int buffslot, int caster_lev
 	}
 	else if(IsClient())
 	{
-		std::vector<EQ::Any> args;
+		std::vector<std::any> args;
 		args.push_back(&buffslot);
 		int i = parse->EventSpell(EVENT_SPELL_EFFECT_CLIENT, nullptr, CastToClient(), spell_id, caster ? caster->GetID() : 0, &args);
 		if(i != 0){
@@ -91,6 +91,9 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, int buffslot, int caster_lev
 		const AA_DBAction* caa = &AA_Actions[aaFrenziedBurnout][0];
 		caster->CastToClient()->EnableAAEffect(aaEffectFrenziedBurnout, caa->duration);
 	}
+
+	// reversed tap spell
+	bool is_tap_recourse = (spells[spell_id].targettype == ST_TargetAETap || spells[spell_id].targettype == ST_Tap) && caster == this;
 
 	// iterate through the effects in the spell
 	for (i = 0; i < EFFECT_COUNT; i++)
@@ -378,7 +381,7 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, int buffslot, int caster_lev
 						Log(Logs::General, Logs::Spells, "Succor/Evacuation Spell In Same Zone.");
 #endif
 						if (IsClient())
-							CastToClient()->MovePC(zone->GetZoneID(), x, y, z, heading, 0, EvacToSafeCoords);
+							CastToClient()->MovePCGuildID(zone->GetZoneID(), zone->GetGuildID(), x, y, z, heading, 0, EvacToSafeCoords);
 						else
 							GMMove(x, y, z, heading);
 					}
@@ -391,12 +394,13 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, int buffslot, int caster_lev
 							uint32 zoneid = database.GetZoneID(target_zone);
 							zone->ApplyRandomLoc(zoneid, x, y);
 							if (zoneid == zone->GetZoneID()) {
-								CastToClient()->MovePC(zoneid, x, y, z, heading);
+								CastToClient()->MovePCGuildID(zoneid, zone->GetGuildID(), x, y, z, heading);
 							}
 							else {
 								CastToClient()->zone_mode = ZoneSolicited;
 								CastToClient()->m_ZoneSummonLocation = glm::vec4(x, y, z, heading);
 								CastToClient()->zonesummon_id = zoneid;
+								CastToClient()->zonesummon_guildid = GUILD_NONE;
 								CastToClient()->zonesummon_ignorerestrictions = 0;
 								SetHeading(heading);
 								CastToClient()->zoning_timer.Start();
@@ -454,7 +458,7 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, int buffslot, int caster_lev
 				if(IsClient())
 				{
 					if(!target_zone)
-						CastToClient()->MovePC(zone->GetZoneID(), x, y, z, heading);
+						CastToClient()->MovePCGuildID(zone->GetZoneID(), zone->GetGuildID(), x, y, z, heading);
 					else
 					{
 						uint32 zoneid = database.GetZoneID(target_zone);
@@ -467,12 +471,13 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, int buffslot, int caster_lev
 						}
 						zone->ApplyRandomLoc(zoneid, x, y);
 						if (zoneid == zone->GetZoneID()) {
-							CastToClient()->MovePC(zoneid, x, y, z, heading);
+							CastToClient()->MovePCGuildID(zoneid, zone->GetGuildID(), x, y, z, heading);
 						}
 						else {
 							CastToClient()->zone_mode = ZoneSolicited;
 							CastToClient()->m_ZoneSummonLocation = glm::vec4(x, y, z, heading);
 							CastToClient()->zonesummon_id = zoneid;
+							CastToClient()->zonesummon_guildid = GUILD_NONE;
 							CastToClient()->zonesummon_ignorerestrictions = 0;
 							SetHeading(heading);
 							CastToClient()->zoning_timer.Start();
@@ -1716,23 +1721,23 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, int buffslot, int caster_lev
 #endif
 				if (effect_value < 0)
 				{
-					effect_value = 0 - effect_value;
 					int buff_count = GetMaxTotalSlots();
 					for (int j=0; j < buff_count; j++) {
 						if (!IsValidSpell(buffs[j].spellid))
 							continue;
 						if (CalculatePoisonCounters(buffs[j].spellid) == 0)
 							continue;
-						if (effect_value >= static_cast<int>(buffs[j].counters)) {
-							if (caster)
-								caster->Message_StringID(MT_Spells, TARGET_CURED);
-							effect_value -= buffs[j].counters;
-							buffs[j].counters = 0;
-							BuffFadeBySlot(j);
-						} else {
-							buffs[j].counters -= effect_value;
-							effect_value = 0;
-							break;
+						// solar: there is an intentional weirdness here - the variable 'i' here is the slot number of the counter effect in the cure spell, but it's also used to index the buff spell.
+						// it should probably use the index of the counter effect in the buff spell but this is how sony did it.
+						if (effect_value + CalcSpellEffectValue(buffs[j].spellid, i, buffs[j].casterlevel, 0, buffs[j].instrumentmod) <= 6)
+						{
+							buffs[j].counters += effect_value;
+							if (buffs[j].counters <= 0)
+							{
+								if (caster)
+									caster->Message_StringID(MT_Spells, TARGET_CURED);
+								BuffFadeBySlot(j);
+							}
 						}
 					}
 				}
@@ -1746,26 +1751,23 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, int buffslot, int caster_lev
 #endif
 				if (effect_value < 0)
 				{
-					effect_value = 0 - effect_value;
 					int buff_count = GetMaxTotalSlots();
 					for (int j=0; j < buff_count; j++) {
 						if (!IsValidSpell(buffs[j].spellid))
 							continue;
 						if (CalculateDiseaseCounters(buffs[j].spellid) == 0)
 							continue;
-						if (effect_value >= static_cast<int>(buffs[j].counters))
+						// solar: there is an intentional weirdness here - the variable 'i' here is the slot number of the counter effect in the cure spell, but it's also used to index the buff spell.
+						// it should probably use the index of the counter effect in the buff spell but this is how sony did it.
+						if (effect_value + CalcSpellEffectValue(buffs[j].spellid, i, buffs[j].casterlevel, 0, buffs[j].instrumentmod) <= 6)
 						{
-							if (caster)
-								caster->Message_StringID(MT_Spells, TARGET_CURED);
-							effect_value -= buffs[j].counters;
-							buffs[j].counters = 0;
-							BuffFadeBySlot(j);
-						}
-						else
-						{
-							buffs[j].counters -= effect_value;
-							effect_value = 0;
-							break;
+							buffs[j].counters += effect_value;
+							if (buffs[j].counters <= 0)
+							{
+								if (caster)
+									caster->Message_StringID(MT_Spells, TARGET_CURED);
+								BuffFadeBySlot(j);
+							}
 						}
 					}
 				}
@@ -1779,26 +1781,24 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, int buffslot, int caster_lev
 #endif
 				if (effect_value < 0)
 				{
-					effect_value = 0 - effect_value;
 					int buff_count = GetMaxTotalSlots();
 					for (int j=0; j < buff_count; j++) {
 						if (!IsValidSpell(buffs[j].spellid))
 							continue;
 						if (CalculateCurseCounters(buffs[j].spellid) == 0)
 							continue;
-						if (effect_value >= static_cast<int>(buffs[j].counters))
+						// solar: there is an intentional weirdness here - the variable 'i' here is the slot number of the counter effect in the cure spell, but it's also used to index the buff spell.
+						// it should probably use the index of the counter effect in the buff spell but this is how sony did it.
+						if (effect_value + CalcSpellEffectValue(buffs[j].spellid, i, buffs[j].casterlevel, 0, buffs[j].instrumentmod) <= 6 
+							|| (buffs[j].spellid == SPELL_EPOCH_CONVICTION && spell_id == SPELL_REMOVE_GREATER_CURSE)) // TAKP customization for Quarm spell Epoch Conviction
 						{
-							if (caster)
-								caster->Message_StringID(MT_Spells, TARGET_CURED);
-							effect_value -= buffs[j].counters;
-							buffs[j].counters = 0;
-							BuffFadeBySlot(j);
-						}
-						else
-						{
-							buffs[j].counters -= effect_value;
-							effect_value = 0;
-							break;
+							buffs[j].counters += effect_value;
+							if (buffs[j].counters <= 0)
+							{
+								if (caster)
+									caster->Message_StringID(MT_Spells, TARGET_CURED);
+								BuffFadeBySlot(j);
+							}
 						}
 					}
 				}
@@ -1892,7 +1892,7 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, int buffslot, int caster_lev
 						entity_list.AddHealAggro(this, caster, CheckHealAggroAmount(spell_id, this, (GetMaxHP() - GetHP())));
 					}
 
-					CastToClient()->MovePC(zone->GetZoneID(), caster->GetX(), caster->GetY(), caster->GetZ(), caster->GetHeading(), 2, SummonPC);
+					CastToClient()->MovePCGuildID(zone->GetZoneID(), zone->GetGuildID(), caster->GetX(), caster->GetY(), caster->GetZ(), caster->GetHeading(), 2, SummonPC);
 				}
 				else
 					caster->Message(CC_Red, "This spell can only be cast on players.");
@@ -2745,7 +2745,7 @@ void Mob::DoBuffTic(uint16 spell_id, int slot, uint32 ticsremaining, uint8 caste
 
 	if(IsNPC())
 	{
-		std::vector<EQ::Any> args;
+		std::vector<std::any> args;
 		args.push_back(&ticsremaining);
 		args.push_back(&caster_level);
 		args.push_back(&slot);
@@ -2756,7 +2756,7 @@ void Mob::DoBuffTic(uint16 spell_id, int slot, uint32 ticsremaining, uint8 caste
 	}
 	else
 	{
-		std::vector<EQ::Any> args;
+		std::vector<std::any> args;
 		args.push_back(&ticsremaining);
 		args.push_back(&caster_level);
 		args.push_back(&slot);
@@ -2777,6 +2777,9 @@ void Mob::DoBuffTic(uint16 spell_id, int slot, uint32 ticsremaining, uint8 caste
 		}
 	}
 
+	// reversed tap spell
+	bool is_tap_recourse = (spells[spell_id].targettype == ST_TargetAETap || spells[spell_id].targettype == ST_Tap) && caster == this;
+
 	for (int i = 0; i < EFFECT_COUNT; i++)
 	{
 		if(IsBlankSpellEffect(spell_id, i))
@@ -2791,6 +2794,7 @@ void Mob::DoBuffTic(uint16 spell_id, int slot, uint32 ticsremaining, uint8 caste
 			case SE_CurrentHP:
 			{
 				effect_value = CalcSpellEffectValue(spell_id, i, caster_level, ticsremaining, instrumentmod);
+				if (is_tap_recourse) effect_value = -effect_value;
 				int hate_amount = effect_value;
 				//Handle client cast DOTs here.
 				if (caster && caster->IsClient() && IsDetrimentalSpell(spell_id) && effect_value < 0) {
@@ -2829,7 +2833,7 @@ void Mob::DoBuffTic(uint16 spell_id, int slot, uint32 ticsremaining, uint8 caste
 			}
 			case SE_HealOverTime:
 			{
-				effect_value = CalcSpellEffectValue(spell_id, i, caster_level, 0, instrumentmod);
+				effect_value = CalcSpellEffectValue(spell_id, i, caster_level, ticsremaining, instrumentmod);
 				if(caster)
 					effect_value = caster->GetActSpellHealing(spell_id, effect_value, nullptr, true);
 
@@ -3008,12 +3012,12 @@ void Mob::DoBuffTic(uint16 spell_id, int slot, uint32 ticsremaining, uint8 caste
 
 						if(zone->random.Real(0.0, 100.0) < break_chance)
 						{
-							BuffModifyDurationBySpellID(spell_id, 10, false);
+							BuffModifyDurationBySpellID(spell_id, 10, true);
 							Log(Logs::General, Logs::Spells, "Invis spell %d fading early. 10 tics remain.", spell_id);
 						}
 					}
 				}
-				else if (ticsremaining <= 2 && ticsremaining > 1)
+				else if (ticsremaining == 2)
 				{
 					Message_StringID(CC_User_SpellFailure, INVIS_BEGIN_BREAK);
 				}
@@ -3075,12 +3079,12 @@ void Mob::BuffFadeBySlot(int slot, bool iRecalcBonuses, bool message, bool updat
 	}
 
 	if(IsClient()) {
-		std::vector<EQ::Any> args;
+		std::vector<std::any> args;
 		args.push_back(&buffs[slot].casterid);
 
 		parse->EventSpell(EVENT_SPELL_FADE, nullptr, CastToClient(), buffs[slot].spellid, slot, &args);
 	} else if(IsNPC()) {
-		std::vector<EQ::Any> args;
+		std::vector<std::any> args;
 		args.push_back(&buffs[slot].casterid);
 
 		parse->EventSpell(EVENT_SPELL_FADE, CastToNPC(), nullptr, buffs[slot].spellid, slot, &args);
@@ -4460,7 +4464,7 @@ void Client::ApplyDurationFocus(uint16 spell_id, uint16 buffslot, Mob* spelltar,
 					int32 pacify_original_duration = buffs[buffslot].ticsremaining;
 					int32 pacify_modified_duration = 8; // 7 plus extra tick
 					Log(Logs::General, Logs::Focus, "Pacify spell TAKP special - reducing duration from %d to %d before focus", pacify_original_duration, pacify_modified_duration);
-					spelltar->BuffModifyDurationBySpellID(spell_id, pacify_modified_duration, false);
+					spelltar->BuffModifyDurationBySpellID(spell_id, pacify_modified_duration, false); // update false because we call the function again below to really update
 				}
 				int32 tics = buffs[buffslot].ticsremaining;
 				int32 newduration = (tics * casting_spell_focus_duration) / 100;

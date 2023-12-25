@@ -36,6 +36,8 @@ Raid::Raid(uint32 raidID)
 	memset(members ,0, (sizeof(RaidMember)*MAX_RAID_MEMBERS));
 	leader = nullptr;
 	memset(leadername, 0, 64);
+	currentleaderguildid = GUILD_NONE;
+	raid_engage_check_result = true;
 	LootType = 1;
 	disbandCheck = false;
 	forceDisband = false;
@@ -48,9 +50,11 @@ Raid::Raid(Client* nLeader)
 	leader = nLeader;
 	memset(leadername, 0, 64);
 	strn0cpy(leadername, nLeader->GetName(), 64);
+	currentleaderguildid = nLeader->GuildID();
 	LootType = 1;
 	disbandCheck = false;
 	forceDisband = false;
+	raid_engage_check_result = true;
 }
 
 Raid::~Raid()
@@ -83,10 +87,10 @@ void Raid::AddMember(Client *c, uint32 group, bool rleader, bool groupleader, bo
 
 	std::string query = StringFormat("INSERT INTO raid_members SET raidid = %lu, charid = %lu, "
                                     "groupid = %lu, _class = %d, level = %d, name = '%s', "
-                                    "isgroupleader = %d, israidleader = %d, islooter = %d",
+                                    "isgroupleader = %d, israidleader = %d, islooter = %d, guild_id=%lu, is_officer=%d ",
                                     (unsigned long)GetID(), (unsigned long)c->CharacterID(),
                                     (unsigned long)group, c->GetClass(), c->GetLevel(),
-                                    c->GetName(), groupleader, rleader, looter);
+                                    c->GetName(), groupleader, rleader, looter, (unsigned long)c->GuildID(), c->GuildRank());
     auto results = database.QueryDatabase(query);
 
 	if(!results.Success()) {
@@ -106,6 +110,7 @@ void Raid::AddMember(Client *c, uint32 group, bool rleader, bool groupleader, bo
 	rga->rid = GetID();
 	strn0cpy(rga->playername, c->GetName(), 64);
 	rga->zoneid = zone->GetZoneID();
+	rga->zoneguildid = zone->GetGuildID();
 	worldserver.SendPacket(pack);
 	safe_delete(pack);
 }
@@ -206,6 +211,7 @@ void Raid::RemoveMember(const char *characterName)
 	rga->rid = GetID();
 	strn0cpy(rga->playername, characterName, 64);
 	rga->zoneid = zone->GetZoneID();
+	rga->zoneguildid = zone->GetGuildID();
 	worldserver.SendPacket(pack);
 	safe_delete(pack);
 }
@@ -233,6 +239,7 @@ void Raid::DisbandRaid()
 	rga->rid = GetID();
 	strn0cpy(rga->playername, " ", 64);
 	rga->zoneid = zone->GetZoneID();
+	rga->zoneguildid = zone->GetGuildID();
 	worldserver.SendPacket(pack);
 	safe_delete(pack);
 
@@ -357,6 +364,7 @@ void Raid::MoveMember(const char *name, uint32 newGroup)
 	rga->rid = GetID();
 	strn0cpy(rga->playername, name, 64);
 	rga->zoneid = zone->GetZoneID();
+	rga->zoneguildid = zone->GetGuildID();
 	rga->gid = newGroup;
 	worldserver.SendPacket(pack);
 	safe_delete(pack);
@@ -379,6 +387,7 @@ void Raid::SetGroupLeader(const char *who, uint32 gid, bool flag)
 	rga->gid = gid;
 	strn0cpy(rga->playername, who, 64);
 	rga->zoneid = zone->GetZoneID();
+	rga->zoneguildid = zone->GetGuildID();
 	worldserver.SendPacket(pack);
 	safe_delete(pack);
 }
@@ -399,6 +408,7 @@ void Raid::UnSetGroupLeader(const char *who, const char *other, uint32 gid)
 	rga->gid = gid;
 	strn0cpy(rga->playername, other, 64);
 	rga->zoneid = zone->GetZoneID();
+	rga->zoneguildid = zone->GetGuildID();
 	worldserver.SendPacket(pack);
 	safe_delete(pack);
 }
@@ -432,6 +442,7 @@ void Raid::SetRaidLeader(const char *wasLead, const char *name)
 	rga->rid = GetID();
 	strn0cpy(rga->playername, name, 64);
 	rga->zoneid = zone->GetZoneID();
+	rga->zoneguildid = zone->GetGuildID();
 	worldserver.SendPacket(pack);
 	safe_delete(pack);
 }
@@ -511,6 +522,73 @@ uint8 Raid::RaidCount()
 			count++;
 	}
 	return count;
+}
+
+uint32 Raid::GetLeaderGuildID()
+{
+	return currentleaderguildid;
+}
+
+bool Raid::IsGuildOfficerInRaidOfGuild(uint32 guild_id)
+{
+	if (guild_id == GUILD_NONE)
+	{
+		return false;
+	}
+
+	for (int x = 0; x < MAX_RAID_MEMBERS; x++)
+	{
+		if (members[x].IsGuildOfficer && members[x].guildid == guild_id)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool Raid::CanRaidEngageRaidTarget(uint32 guild_id)
+{
+	bool has_raid_officer = IsGuildOfficerInRaidOfGuild(guild_id);
+
+	if (!has_raid_officer)
+		return false;
+
+	uint32 present_members = GetPresentMembersFromGuildID(guild_id);
+	uint32 raid_count = RaidCount();
+
+	if (present_members < RuleI(Quarm, AutomatedRaidRotationRaidGuildMemberCountRequirement))
+		return false;
+
+	if (raid_count < RuleI(Quarm, AutomatedRaidRotationRaidNonMemberCountRequirement))
+		return false;
+
+	return true;
+}
+
+uint32 Raid::GetPresentMembersFromGuildID(uint32 guild_id)
+{
+	if (guild_id == 0 || guild_id == GUILD_NONE)
+	{
+		return 0;
+	}
+
+	uint32 membercount = 0;
+
+	for (int x = 0; x < MAX_RAID_MEMBERS; x++)
+	{
+		if (strlen(members[x].membername) > 0)
+		{
+			uint32 guild_id = members[x].guildid;
+			uint32 member_level = members[x].level >= RuleI(Quarm, AutomatedRaidRotationRaidGuildLevelRequirement);
+
+			if (guild_id != 0 && guild_id != GUILD_NONE && guild_id == guild_id)
+			{
+				membercount++;
+			}
+		}
+	}
+
+	return membercount;
 }
 
 uint32 Raid::GetGroup(const char *name)
@@ -920,6 +998,7 @@ void Raid::ChangeLootType(uint32 type)
 	ServerRaidGeneralAction_Struct *rga = (ServerRaidGeneralAction_Struct*)pack->pBuffer;
 	rga->rid = GetID();
 	rga->zoneid = zone->GetZoneID();
+	rga->zoneguildid = zone->GetGuildID();
 	rga->looter = type;
 	worldserver.SendPacket(pack);
 	safe_delete(pack);
@@ -942,6 +1021,7 @@ void Raid::AddRaidLooter(const char* looter)
 	ServerRaidGeneralAction_Struct *rga = (ServerRaidGeneralAction_Struct*)pack->pBuffer;
 	rga->rid = GetID();
 	rga->zoneid = zone->GetZoneID();
+	rga->zoneguildid = zone->GetGuildID();
 	strn0cpy(rga->playername, looter, 64);
 	worldserver.SendPacket(pack);
 	safe_delete(pack);
@@ -962,10 +1042,56 @@ void Raid::RemoveRaidLooter(const char* looter)
 	ServerRaidGeneralAction_Struct *rga = (ServerRaidGeneralAction_Struct*)pack->pBuffer;
 	rga->rid = GetID();
 	rga->zoneid = zone->GetZoneID();
+	rga->zoneguildid = zone->GetGuildID();
 	strn0cpy(rga->playername, looter, 64);
 	worldserver.SendPacket(pack);
 	safe_delete(pack);
 }
+
+bool Raid::IsRaidLooter(const Client* c) {
+	for (int x = 0; x < MAX_RAID_MEMBERS; x++)
+	{
+		if (members[x].member == c && members[x].IsLooter)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool Raid::IsRaidLeader(const Client* c) {
+	for (int x = 0; x < MAX_RAID_MEMBERS; x++)
+	{
+		if (members[x].member == c && members[x].IsRaidLeader)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool Raid::IsRaidLeaderOrLooter(const Client* c) {
+	for (int x = 0; x < MAX_RAID_MEMBERS; x++)
+	{
+		if (members[x].member == c && (members[x].IsLooter || members[x].IsRaidLeader))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool Raid::IsRaidLeaderOrGroupLeader(const Client* c) {
+	for (int x = 0; x < MAX_RAID_MEMBERS; x++)
+	{
+		if (members[x].member == c && (members[x].IsGroupLeader || members[x].IsRaidLeader))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 
 bool Raid::IsRaidMember(const char *name){
 	for(int x = 0; x < MAX_RAID_MEMBERS; x++)
@@ -1413,6 +1539,7 @@ void Raid::GroupUpdate(uint32 gid, bool initial)
 		rga->gid = gid;
 		rga->rid = GetID();
 		rga->zoneid = zone->GetZoneID();
+		rga->zoneguildid = zone->GetGuildID();
 		worldserver.SendPacket(pack);
 		safe_delete(pack);
 	}
@@ -1440,6 +1567,7 @@ void Raid::GroupJoin(const char *who, uint32 gid, Client* exclude, bool initial)
 		sgj->gid = gid;
 		sgj->rid = GetID();
 		sgj->zoneid = zone->GetZoneID();
+		sgj->zoneguildid = zone->GetGuildID();
 		strcpy(sgj->member_name, who);
 		worldserver.SendPacket(pack);
 		safe_delete(pack);
@@ -1457,8 +1585,30 @@ void Raid::SendGroupJoin(Client* client, const char *who)
 	safe_delete(outapp);
 }
 
+void Raid::UpdateGuildRank(Client* update)
+{
+	if (!update)
+		return;
+
+
+	for (int x = 0; x < MAX_RAID_MEMBERS; x++)
+	{
+		if (strcmp(update->GetCleanName(), members[x].membername) == 0)
+		{
+			if (update->GuildID() != GUILD_NONE)
+				members[x].IsGuildOfficer = update->GuildRank() >= 1;
+			else
+				members[x].IsGuildOfficer = 0;
+		}
+	}
+}
+
 void Raid::UpdatePlayer(Client* update) 
 {
+
+	if (!update)
+		return;
+
 	uint32 grp = GetGroup(update->GetName());
 	//update their player profile
 	PlayerProfile_Struct &pp = update->GetPP();
@@ -1470,6 +1620,7 @@ void Raid::UpdatePlayer(Client* update)
 			if (strlen(members[x].membername) > 0)
 			{
 				strn0cpy(pp.groupMembers[index], members[x].membername, 64);
+				members[x].IsGuildOfficer = update->GuildRank() >= 1;
 				++index;
 			}
 			else
@@ -1558,6 +1709,7 @@ void Raid::SendRaidGroupRemove(const char *who, uint32 gid, bool skip_removed)
 	rga->zoneid = zone->GetZoneID();
 	rga->rid = GetID();
 	rga->gid = gid;
+	rga->zoneguildid = zone->GetGuildID();
 	strn0cpy(rga->playername, who, 64);
 	worldserver.SendPacket(pack);
 	safe_delete(pack);
@@ -1595,7 +1747,7 @@ bool Raid::LearnMembers()
 	memset(members, 0, (sizeof(RaidMember)*MAX_RAID_MEMBERS));
 
 	std::string query = StringFormat("SELECT name, groupid, _class, level, "
-                                    "isgroupleader, israidleader, islooter "
+                                    "isgroupleader, israidleader, islooter, guild_id, is_officer "
                                     "FROM raid_members WHERE raidid = %lu",
                                     (unsigned long)GetID());
     auto results = database.QueryDatabase(query);
@@ -1628,6 +1780,8 @@ bool Raid::LearnMembers()
         members[index].IsGroupLeader = atoi(row[4]);
         members[index].IsRaidLeader = atoi(row[5]);
         members[index].IsLooter = atoi(row[6]);
+		members[index].guildid = atoi(row[7]);
+		members[index].IsGuildOfficer = atoi(row[8]);
         ++index;
     }
 
@@ -1653,10 +1807,17 @@ void Raid::VerifyRaid()
 		if(members[x].IsRaidLeader){
 			if(strlen(members[x].membername) > 0){
 				SetLeader(members[x].member);
+				currentleaderguildid = members[x].guildid;
 				strn0cpy(leadername, members[x].membername, 64);
 			}
 		}
 	}
+
+	if (zone && zone->GetGuildID() != GUILD_NONE)
+	{
+		raid_engage_check_result = CanRaidEngageRaidTarget(zone->GetGuildID());
+	}
+
 }
 
 void Raid::MemberZoned(Client *c)

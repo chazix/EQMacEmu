@@ -135,7 +135,9 @@ NPC::NPC(const NPCType* d, Spawn2* in_respawn, const glm::vec4& position, int if
 	if (mob != 0)
 		entity_list.RemoveEntity(mob->GetID());
 
-	NPCTypedata = d;
+	loot_lockout_timer = 0;
+	memset(&NPCTypedata, 0, sizeof(NPCTypedata));
+	memcpy(&NPCTypedata, d, sizeof(NPCTypedata));
 	respawn2 = in_respawn;
 	swarm_timer.Disable();
 
@@ -201,6 +203,8 @@ NPC::NPC(const NPCType* d, Spawn2* in_respawn, const glm::vec4& position, int if
 
 	accuracy_rating = d->accuracy_rating;
 	ATK = d->ATK;
+
+	loot_lockout_timer = d->loot_lockout;
 
 	CalcMaxMana();
 	SetMana(GetMaxMana());
@@ -443,8 +447,6 @@ NPC::~NPC()
 	}
 
 	safe_delete(reface_timer);
-	if (GetSwarmInfo())
-		safe_delete(NPCTypedata);	// created in Mob::CreateTemporaryPet
 	safe_delete(swarmInfoPtr);
 	safe_delete(qGlobals);
 	UninitializeBuffSlots();
@@ -2744,7 +2746,7 @@ void NPC::ProcessFTE()
 				}
 				if (!guild_string.empty())
 				{
-					entity_list.Message(0, 15, "Guild %s is no longer FTE locked out of %s!", guild_string.c_str(), GetCleanName());
+					//entity_list.Message(0, 15, "Guild %s is no longer FTE locked out of %s!", guild_string.c_str(), GetCleanName());
 				}
 				it = guild_fte_lockouts.erase(it);
 				continue;

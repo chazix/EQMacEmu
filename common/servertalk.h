@@ -171,6 +171,7 @@
 #define ServerOP_ReloadLogs 0x4010
 #define ServerOP_QuakeImminent 0x4011
 #define ServerOP_QuakeRequest 0x4012
+#define ServerOP_QuakeEnded 0x4013
 
 /* Query Server OP Codes */
 #define ServerOP_QSPlayerLogItemDeletes				0x5013
@@ -296,6 +297,7 @@ struct ServerZoneStateChange_struct {
 	char adminname[64];
 	uint32 zoneid;
 	bool makestatic;
+	uint32 ZoneServerGuildID;
 };
 
 struct ServerDownZoneBoot_struct {
@@ -304,6 +306,7 @@ struct ServerDownZoneBoot_struct {
 
 struct ServerZoneIncomingClient_Struct {
 	uint32	zoneid;		// in case the zone shut down, boot it back up
+	uint32	zoneguildid;		// in case the zone shut down, boot it back up
 	uint32	ip;			// client's IP address
 	uint32	wid;		// client's WorldID#
 	uint32	accid;
@@ -365,6 +368,7 @@ struct ServerClientList_Struct {
 	uint32	wid;
 	uint32	IP;
 	uint32	zone;
+	uint32	zoneguildid;
 	int16	Admin;
 	uint32	charid;
 	char	name[64];
@@ -392,9 +396,6 @@ struct ServerClientList_Struct {
 	bool	AFK;
 	bool	Trader;
 	int8	Revoked;
-	bool	selffound;
-	bool	hardcore;
-	bool	solo;
 };
 
 struct ServerClientListKeepAlive_Struct {
@@ -408,6 +409,7 @@ struct ServerZonePlayer_Struct {
 	uint8	ignorerestrictions;
 	char	name[64];
 	char	zone[25];
+	uint32	zoneguildid;
 	float	x_pos;
 	float	y_pos;
 	float	z_pos;
@@ -417,6 +419,8 @@ struct RezzPlayer_Struct {
 	uint32	dbid;
 	uint32	exp;
 	uint16	rezzopcode;
+	uint32	corpse_zone_id;
+	uint32	corpse_zone_guild_id;
 	//char	packet[160];
 	Resurrect_Struct rez;
 };
@@ -430,6 +434,7 @@ struct ServerZoneReboot_Struct {
 
 struct SetZone_Struct {
 	uint32	zoneid;
+	uint32	zoneguildid;
 	bool	staticzone;
 };
 
@@ -550,6 +555,7 @@ struct ServerGMGoto_Struct {
 	char	myname[64];
 	char	gotoname[64];
 	int16	admin;
+	uint32	guildinstanceid;
 };
 
 struct ServerMultiLineMsg_Struct {
@@ -626,7 +632,9 @@ struct ZoneToZone_Struct {
 	char	name[64];
 	uint32	guild_id;
 	uint32	requested_zone_id;
+	uint32	requested_zone_guild_id;
 	uint32	current_zone_id;
+	uint32	current_zone_guild_id;
 	int8	response;
 	int16	admin;
 	uint8	ignorerestrictions;
@@ -703,6 +711,7 @@ struct ServerGroupIDReply_Struct {
 
 struct ServerGroupLeave_Struct {
 	uint32 zoneid;
+	uint32 zoneguildid;
 	uint32 gid;
 	char member_name[64];	//kick this member from the group
 	bool	checkleader;
@@ -710,12 +719,14 @@ struct ServerGroupLeave_Struct {
 
 struct ServerGroupJoin_Struct {
 	uint32 zoneid;
+	uint32 zoneguildid;
 	uint32 gid;
 	char member_name[64];	//this person is joining the group
 };
 
 struct ServerRaidGroupJoin_Struct {
 	uint32 zoneid;
+	uint32 zoneguildid;
 	uint32 gid;
 	uint32 rid;
 	char member_name[64];	//this person is joining the group
@@ -723,6 +734,7 @@ struct ServerRaidGroupJoin_Struct {
 
 struct ServerGroupLeader_Struct {
 	uint32 zoneid;
+	uint32 zoneguildid;
 	uint32 gid;
 	char leader_name[64];
 	char oldleader_name[64];
@@ -731,11 +743,13 @@ struct ServerGroupLeader_Struct {
 
 struct ServerForceGroupUpdate_Struct {
 	uint32 origZoneID;
+	uint32 origZoneGuildID;
 	uint32 gid;
 };
 
 struct ServerGroupChannelMessage_Struct {
 	uint32 zoneid;
+	uint32 zoneguildid;
 	uint32 groupid;
 	char from[64];
 	uint8 language;
@@ -745,6 +759,7 @@ struct ServerGroupChannelMessage_Struct {
 
 struct ServerDisbandGroup_Struct {
 	uint32 zoneid;
+	uint32 zoneguildid;
 	uint32 groupid;
 };
 
@@ -827,6 +842,7 @@ struct ServerGuildMemberUpdate_Struct {
 struct SpawnPlayerCorpse_Struct {
 	uint32 player_corpse_id;
 	uint32 zone_id;
+	uint32 GuildID;
 };
 
 struct ServerOP_Consent_Struct {
@@ -834,6 +850,7 @@ struct ServerOP_Consent_Struct {
 	char ownername[64];
 	uint8 permission;
 	uint32 zone_id;
+	uint32 GuildID;
 	uint32 message_string_id;
 	uint32 corpse_id;
 };
@@ -852,16 +869,19 @@ struct ServerDepopAllPlayersCorpses_Struct
 {
 	uint32 CharacterID;
 	uint32 ZoneID;
+	uint32 GuildID;
 };
 
 struct ServerDepopPlayerCorpse_Struct
 {
 	uint32 DBID;
 	uint32 ZoneID;
+	uint32 GuildID;
 };
 
 struct ServerRaidGeneralAction_Struct {
 	uint32 zoneid; // also is raid leader bool when sent to zone.
+	uint32 zoneguildid; // also is raid leader bool when sent to zone.
 	uint32 gleader;
 	uint32 rid;
 	uint32 gid;
@@ -1147,6 +1167,7 @@ struct ServerIsOwnerOnline_Struct {
 	char   name[64];	
 	uint32 corpseid;
 	uint16 zoneid;
+	uint32 zoneguildid;
 	uint8  online;
 	uint32 accountid;
 };

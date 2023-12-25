@@ -305,7 +305,6 @@ SET(repositories
 
 SET(common_headers
 	additive_lagged_fibonacci_engine.h
-	any.h
 	base_packet.h
 	base_data.h
 	bodytypes.h
@@ -503,5 +502,9 @@ ADD_LIBRARY(common ${common_sources} ${common_headers} ${repositories})
 IF(UNIX)
 	SET_SOURCE_FILES_PROPERTIES("patches/mac.cpp" PROPERTIES COMPILE_FLAGS -O0)
 ENDIF(UNIX)
+
+IF (WIN32 AND EQEMU_BUILD_PCH)
+    TARGET_PRECOMPILE_HEADERS(common PRIVATE pch/pch.h)
+ENDIF()
 
 SET(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)

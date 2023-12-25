@@ -1718,8 +1718,8 @@ void Mob::ChangeSize(float in_size = 0, bool bNoRestriction) {
 	{
 		if (this->IsClient() || this->petid != 0)
 		{
-			if (in_size < 3.0)
-				in_size = 3.0;
+			if (in_size < 1.0)
+				in_size = 1.0;
 
 			if (in_size > 15.0)
 				in_size = 15.0;
@@ -1842,11 +1842,12 @@ float Mob::MobAngle(Mob *other, float ourx, float oury) const {
 	return angle;
 }
 
-void Mob::SetZone(uint32 zone_id)
+void Mob::SetZone(uint32 zone_id, uint32 zone_guild_id)
 {
 	if(IsClient())
 	{
 		CastToClient()->GetPP().zone_id = zone_id;
+		CastToClient()->GetEPP().zone_guild_id = zone_guild_id;
 		CastToClient()->Save();
 	}
 	Save();
@@ -2215,6 +2216,11 @@ void Mob::WipeHateList(bool from_memblur)
 		SetTarget(nullptr);
 		hate_list.Wipe(from_memblur);
 		DamageTotalsWipe();
+	}
+
+	if (!from_memblur)
+	{
+		m_EngagedClientNames.clear();
 	}
 }
 
@@ -5294,4 +5300,41 @@ void Mob::SetHP(int32 hp)
 		cur_hp = max_hp; 
 	else 
 		cur_hp = hp;
+}
+
+void Mob::AddAllClientsToEngagementRecords()
+{
+	if (!IsNPC())
+		return;
+
+	if (IsPet())
+		return;
+
+	if (npctype_id == 0)
+		return;
+
+	auto clientList = entity_list.GetClientList();
+
+	for (auto client : clientList)
+	{
+		if (client.second)
+		{
+			if (m_EngagedClientNames.find(client.second->GetCleanName()) == m_EngagedClientNames.end())
+			{
+				PlayerEngagementRecord record = PlayerEngagementRecord();
+				record.isFlagged = false;
+				record.lockout = LootLockout();
+				record.character_id = client.second->CharacterID();
+				record.isSelfFound = client.second->IsSelfFound();
+				record.isSoloOnly = client.second->IsSoloOnly();
+
+				auto lootLockoutItr = client.second->loot_lockouts.find(GetNPCTypeID());
+				if (lootLockoutItr != client.second->loot_lockouts.end())
+				{
+					memcpy(&record.lockout, &lootLockoutItr->second, sizeof(LootLockout));
+				}
+				m_EngagedClientNames.emplace(client.second->GetCleanName(), record);
+			}
+		}
+	}
 }

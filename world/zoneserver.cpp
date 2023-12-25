@@ -55,7 +55,10 @@ ZoneServer::ZoneServer(EmuTCPConnection* itcpc)
 	memset(client_local_address, 0, sizeof(client_local_address));
 
 	zone_server_id = zoneserver_list.GetNextID();
+	zone_server_previous_zone_id = 0;
+	zone_server_previous_guild_id = 0xFFFFFFFF;
 	zone_server_zone_id = 0;
+	zone_server_guild_id = 0xFFFFFFFF;
 	zone_os_process_id = 0;
 	client_port = 0;
 	is_booting_up = false;
@@ -71,7 +74,7 @@ ZoneServer::~ZoneServer() {
 	tcpc->Free();
 }
 
-bool ZoneServer::SetZone(uint32 iZoneID, bool iStaticZone) {
+bool ZoneServer::SetZone(uint32 iZoneID, bool iStaticZone, uint32 iGuildID) {
 	is_booting_up = false;
 	ucs_connected = UCSLink.Connected();
 
@@ -79,16 +82,21 @@ bool ZoneServer::SetZone(uint32 iZoneID, bool iStaticZone) {
 	char*	longname;
 
 	if (iZoneID)
-		Log(Logs::Detail, Logs::WorldServer,"Setting to '%s' (%d)%s",(zn) ? zn : "",iZoneID,
+		Log(Logs::Detail, Logs::WorldServer,"Setting to '%s' (%d:%d)%s",(zn) ? zn : "",iZoneID,iGuildID,
 			iStaticZone ? " (Static)" : "");
 
 	zone_server_zone_id = iZoneID;
-	if(iZoneID!=0)
+	zone_server_guild_id = iGuildID;
+	if (iZoneID != 0)
+	{
 		zone_server_previous_zone_id = iZoneID;
+		zone_server_previous_guild_id = iGuildID;
+	}
 	if (zone_server_zone_id == 0) {
 		client_list.CLERemoveZSRef(this);
 		zone_player_count = 0;
-		LSSleepUpdate(GetPrevZoneID());
+		if(zone_server_previous_guild_id != 0xFFFFFFFF)
+			LSSleepUpdate(GetPrevZoneID());
 	}
 
 	is_static_zone = iStaticZone;
@@ -566,7 +574,7 @@ bool ZoneServer::Process() {
 					break;
 				//bounce the packet to the correct zone server, if its up
 				ServerSpawnCondition_Struct* ssc = (ServerSpawnCondition_Struct*)pack->pBuffer;
-				zoneserver_list.SendPacket(ssc->zoneID, pack);
+				zoneserver_list.SendPacket(ssc->zoneID, 0, pack);
 				break;
 			}
 			case ServerOP_SpawnEvent: {
@@ -574,7 +582,7 @@ bool ZoneServer::Process() {
 					break;
 				//bounce the packet to the correct zone server, if its up
 				ServerSpawnEvent_Struct* sse = (ServerSpawnEvent_Struct*)pack->pBuffer;
-				zoneserver_list.SendPacket(sse->zoneID, pack);
+				zoneserver_list.SendPacket(sse->zoneID, 0, pack);
 				break;
 			}
 			case ServerOP_ChannelMessage: {
@@ -745,7 +753,7 @@ bool ZoneServer::Process() {
 				SetZone_Struct* szs = (SetZone_Struct*) pack->pBuffer;
 				if (szs->zoneid != 0) {
 					if(database.GetZoneName(szs->zoneid))
-						SetZone(szs->zoneid, szs->staticzone);
+						SetZone(szs->zoneid, szs->staticzone, szs->zoneguildid);
 					else
 						SetZone(0);
 				}
@@ -845,7 +853,7 @@ bool ZoneServer::Process() {
 						break;
 					}
 				}
-				zoneserver_list.SOPZoneBootup(s->adminname, ZoneServerID, database.GetZoneName(s->zoneid), s->makestatic);
+				zoneserver_list.SOPZoneBootup(s->adminname, ZoneServerID, s->ZoneServerGuildID, database.GetZoneName(s->zoneid), s->makestatic);
 				break;
 			}
 			case ServerOP_ZoneStatus: {
@@ -890,7 +898,7 @@ bool ZoneServer::Process() {
 					ztz->name, ztz->current_zone_id, ztz->requested_zone_id);
 
 				/* This is a request from the egress zone */
-				if(GetZoneID() == ztz->current_zone_id) {
+				if(GetZoneID() == ztz->current_zone_id && GetZoneGuildID() == ztz->current_zone_guild_id) {
 					Log(Logs::Detail, Logs::WorldServer,"Processing ZTZ for egress from zone for client %s", ztz->name);
 
 					if (ztz->admin < 80 && ztz->ignorerestrictions < 2 && zoneserver_list.IsZoneLocked(ztz->requested_zone_id)) {
@@ -900,7 +908,7 @@ bool ZoneServer::Process() {
 					}
 
 					ZoneServer *ingress_server = nullptr;
-					ingress_server = zoneserver_list.FindByZoneID(ztz->requested_zone_id); 
+					ingress_server = zoneserver_list.FindByZoneID(ztz->requested_zone_id, ztz->requested_zone_guild_id); 
 
 					/* Zone was already running*/
 					if(ingress_server) {
@@ -912,7 +920,7 @@ bool ZoneServer::Process() {
 						int server_id;
 						if (!RuleB(World, DontBootDynamics))
 						{
-							if ((server_id = zoneserver_list.TriggerBootup(ztz->requested_zone_id))) {
+							if ((server_id = zoneserver_list.TriggerBootup(ztz->requested_zone_id, ztz->requested_zone_guild_id))) {
 								Log(Logs::Detail, Logs::WorldServer, "Successfully booted a zone for %s", ztz->name);
 								// bootup successful, ready to rock
 								ztz->response = 1;
@@ -943,7 +951,7 @@ bool ZoneServer::Process() {
 				
 					Log(Logs::Detail, Logs::WorldServer,"Processing ZTZ for ingress to zone for client %s", ztz->name);
 					ZoneServer *egress_server = nullptr;
-					egress_server = zoneserver_list.FindByZoneID(ztz->current_zone_id);
+					egress_server = zoneserver_list.FindByZoneID(ztz->current_zone_id, ztz->current_zone_guild_id);
 
 					if(egress_server) {
 						egress_server->SendPacket(pack);
@@ -1052,7 +1060,7 @@ bool ZoneServer::Process() {
 					online->online = 1;
 				else
 					online->online = 0;
-				auto target_zone = zoneserver_list.FindByZoneID(online->zoneid);
+				auto target_zone = zoneserver_list.FindByZoneID(online->zoneid, online->zoneguildid);
 				if (target_zone)
 					SendPacket(pack);
 				break;
@@ -1085,7 +1093,10 @@ bool ZoneServer::Process() {
 					else if (cle->Anon() == 1 && cle->Admin() > gmg->admin) // no snooping for anon GMs
 						this->SendEmoteMessage(gmg->myname, 0, AccountStatus::Player, CC_Red, fmt::format("Error: {} not found", gmg->gotoname).c_str());
 					else
+					{
+						gmg->guildinstanceid = cle->GetZoneGuildID();
 						cle->Server()->SendPacket(pack);
+					}
 				}
 				else {
 					this->SendEmoteMessage(gmg->myname, 0, AccountStatus::Player, CC_Red, fmt::format("Error: {} not found", gmg->gotoname).c_str());
@@ -1223,7 +1234,7 @@ bool ZoneServer::Process() {
 			}
 			case ServerOP_SpawnPlayerCorpse: {
 				SpawnPlayerCorpse_Struct* s = (SpawnPlayerCorpse_Struct*)pack->pBuffer;
-				ZoneServer* zs = zoneserver_list.FindByZoneID(s->zone_id);
+				ZoneServer* zs = zoneserver_list.FindByZoneID(s->zone_id, s->GuildID);
 				if(zs) {
 					if (zs->SendPacket(pack)) {
 						Log(Logs::Detail, Logs::WorldServer,"Sent request to spawn player corpse id %i in zone %u.",s->player_corpse_id, s->zone_id);
@@ -1242,7 +1253,7 @@ bool ZoneServer::Process() {
 				ClientListEntry* cle = client_list.FindCharacter(s->grantname);
 				if (cle)
 				{
-					zs = zoneserver_list.FindByZoneID(cle->zone());
+					zs = zoneserver_list.FindByZoneID(cle->zone(), cle->GetZoneGuildID());
 					if (zs)
 					{
 						//Sends packet to player granted consent. This causes zone to call Consent() and sends the granted player a success message.
@@ -1260,7 +1271,7 @@ bool ZoneServer::Process() {
 								scs->zone_id = s->zone_id;
 								scs->message_string_id = 1427; //CONSENT_GIVEN
 								scs->corpse_id = s->corpse_id;
-								zs = zoneserver_list.FindByZoneID(cle_reply->zone());
+								zs = zoneserver_list.FindByZoneID(cle_reply->zone(), cle_reply->GetZoneGuildID());
 								if (zs)
 								{
 									// Sends packet to owner so they get the success message. If this fails, consent will still occur the owner just won't get a message.
@@ -1284,7 +1295,7 @@ bool ZoneServer::Process() {
 					scs->zone_id = s->zone_id;
 					scs->message_string_id = 101; //TARGET_NOT_FOUND
 					scs->corpse_id = s->corpse_id;
-					zs = zoneserver_list.FindByZoneID(s->zone_id);
+					zs = zoneserver_list.FindByZoneID(s->zone_id, s->GuildID);
 					if (zs)
 					{
 						if (!zs->SendPacket(reply))
@@ -1302,7 +1313,7 @@ bool ZoneServer::Process() {
 			{
 				// This just relays the packet back to the owner's zone. 
 				ServerOP_Consent_Struct* s = (ServerOP_Consent_Struct*)pack->pBuffer;
-				ZoneServer* zs = zoneserver_list.FindByZoneID(s->zone_id);
+				ZoneServer* zs = zoneserver_list.FindByZoneID(s->zone_id, s->GuildID);
 				if(zs) 
 				{
 					if(!zs->SendPacket(pack))
@@ -1356,10 +1367,11 @@ bool ZoneServer::Process() {
 						scs->corpse_id = cd->corpse_id;
 
 						Log(Logs::Detail, Logs::WorldServer, "Created ServerOP_Consent_Response packet. Owner: %s Granted: %s CorpseID: %d", scs->ownername, scs->grantname, scs->corpse_id);
-						ZoneServer* zs = zoneserver_list.FindByZoneID(cle->zone());
+						ZoneServer* zs = zoneserver_list.FindByZoneID(cle->zone(), cle->GetZoneGuildID());
 						if (zs)
 						{
 							scs->zone_id = zs->GetZoneID();
+							scs->GuildID = zs->GetZoneGuildID();
 							zs->SendPacket(scs_pack);
 						}
 
@@ -1452,7 +1464,7 @@ bool ZoneServer::Process() {
 			{
 				CZNPCSignal_Struct* s = (CZNPCSignal_Struct*)pack->pBuffer;
 				uint32 zone_id = s->npctype_id / 1000u;						// NPC IDs have the zone IDs in them.  who cares about pets
-				ZoneServer* zs = zoneserver_list.FindByZoneID(zone_id);
+				ZoneServer* zs = zoneserver_list.FindByZoneID(zone_id, GUILD_NONE);
 				if (zs)
 					zs->SendPacket(pack);
 				break;
@@ -1461,7 +1473,7 @@ bool ZoneServer::Process() {
 			{
 				CZSetEntVarByNPCTypeID_Struct* s = (CZSetEntVarByNPCTypeID_Struct*)pack->pBuffer;
 				uint32 zone_id = s->npctype_id / 1000u;
-				ZoneServer* zs = zoneserver_list.FindByZoneID(zone_id);
+				ZoneServer* zs = zoneserver_list.FindByZoneID(zone_id, GUILD_NONE);
 				if (zs)
 					zs->SendPacket(pack);
 				break;
@@ -1550,7 +1562,7 @@ bool ZoneServer::Process() {
 							break;
 						}
 
-						zoneserver_list.SOPZoneBootup(s->adminname, zoneserverid, zone_name.c_str(), true);
+						zoneserver_list.SOPZoneBootup(s->adminname, zoneserverid, 0xFFFFFFFF, zone_name.c_str(), true);
 					}
 				}
 
@@ -1630,9 +1642,10 @@ void ZoneServer::ChangeWID(uint32 iCharID, uint32 iWID) {
 	delete pack;
 }
 
-void ZoneServer::TriggerBootup(uint32 iZoneID, const char* adminname, bool iMakeStatic) {
+void ZoneServer::TriggerBootup(uint32 iZoneID, const char* adminname, bool iMakeStatic, uint32 iGuildID) {
 	is_booting_up = true;
 	zone_server_zone_id = iZoneID;
+	zone_server_guild_id = iGuildID;
 
 	auto pack = new ServerPacket(ServerOP_ZoneBootup, sizeof(ServerZoneStateChange_struct));
 	ServerZoneStateChange_struct* s = (ServerZoneStateChange_struct *) pack->pBuffer;
@@ -1645,10 +1658,13 @@ void ZoneServer::TriggerBootup(uint32 iZoneID, const char* adminname, bool iMake
 	else
 		s->zoneid = iZoneID;
 
+	s->ZoneServerGuildID = iGuildID;
+
 	s->makestatic = iMakeStatic;
 	SendPacket(pack);
 	delete pack;
-	LSBootUpdate(iZoneID);
+	if(iGuildID == GUILD_NONE)
+		LSBootUpdate(iZoneID);
 }
 
 void ZoneServer::IncomingClient(Client* client) {
@@ -1656,6 +1672,7 @@ void ZoneServer::IncomingClient(Client* client) {
 	auto pack = new ServerPacket(ServerOP_ZoneIncClient, sizeof(ServerZoneIncomingClient_Struct));
 	ServerZoneIncomingClient_Struct* s = (ServerZoneIncomingClient_Struct*) pack->pBuffer;
 	s->zoneid = GetZoneID();
+	s->zoneguildid = GetZoneGuildID();
 	s->wid = client->GetWID();
 	s->ip = client->GetIP();
 	s->accid = client->GetAccountID();

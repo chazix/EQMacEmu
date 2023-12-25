@@ -18,6 +18,7 @@
 
 #include "../common/global_define.h"
 #include "../common/eqemu_logsys.h"
+#include "../common/fastmath.h"
 #include "../common/misc_functions.h"
 #include "../common/rulesys.h"
 #include "../common/strings.h"
@@ -348,7 +349,7 @@ void Client::GoFish()
 			}
 
 			if(inst) {
-				std::vector<EQ::Any> args;
+				std::vector<std::any> args;
 				args.push_back(inst);
 				parse->EventPlayer(EVENT_FISH_SUCCESS, this, "", inst->GetID(), &args);
 			}
@@ -493,7 +494,7 @@ void Client::ForageItem(bool guarantee) {
 			}
 
 			if(inst) {
-				std::vector<EQ::Any> args;
+				std::vector<std::any> args;
 				args.push_back(inst);
 				parse->EventPlayer(EVENT_FORAGE_SUCCESS, this, "", inst->GetID(), &args);
 			}

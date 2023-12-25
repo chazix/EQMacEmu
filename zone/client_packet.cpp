@@ -270,6 +270,7 @@ void MapOpcodes()
 	ConnectedOpcodes[OP_MBRetrievalEraseRequest] = &Client::Handle_OP_MBRetrievalEraseRequest;
 	ConnectedOpcodes[OP_Key] = &Client::Handle_OP_Key;
 	ConnectedOpcodes[OP_TradeRefused] = &Client::Handle_OP_TradeRefused;
+	ConnectedOpcodes[OP_SpellTextMessage] = &Client::Handle_OP_SpellTextMessage;
 }
 
 void ClearMappedOpcode(EmuOpcode op)
@@ -325,7 +326,7 @@ int Client::HandlePacket(const EQApplicationPacket *app)
 	case CLIENT_CONNECTING: {
 		if(ConnectingOpcodes.count(opcode) != 1) {
 			//Hate const cast but everything in lua needs to be non-const even if i make it non-mutable
-			std::vector<EQ::Any> args;
+			std::vector<std::any> args;
 			args.push_back(const_cast<EQApplicationPacket*>(app));
 			parse->EventPlayer(EVENT_UNHANDLED_OPCODE, this, "", 1, &args);
 
@@ -355,7 +356,7 @@ int Client::HandlePacket(const EQApplicationPacket *app)
 		ClientPacketProc p;
 		p = ConnectedOpcodes[opcode];
 		if(p == nullptr) { 
-			std::vector<EQ::Any> args;
+			std::vector<std::any> args;
 			args.push_back(const_cast<EQApplicationPacket*>(app));
 			parse->EventPlayer(EVENT_UNHANDLED_OPCODE, this, "", 0, &args);
 
@@ -691,7 +692,7 @@ void Client::CompleteConnect()
 		Log(Logs::Detail, Logs::Status, "[CLIENT] Kicking char from zone, not allowed here");
 		if (m_pp.expansions & LuclinEQ)
 		{
-			GoToSafeCoords(database.GetZoneID("arena"));
+			GoToSafeCoords(database.GetZoneID("arena"), GUILD_NONE);
 		}
 		else
 		{
@@ -700,10 +701,10 @@ void Client::CompleteConnect()
 			{
 				m_pp.expansions = m_pp.expansions + LuclinEQ;
 				database.SetExpansion(AccountName(), m_pp.expansions);
-				GoToSafeCoords(database.GetZoneID("bazaar"));
+				GoToSafeCoords(database.GetZoneID("bazaar"), GUILD_NONE);
 			}
 
-			GoToSafeCoords(database.GetZoneID("arena"));
+			GoToSafeCoords(database.GetZoneID("arena"), GUILD_NONE);
 		}
 		return;
 	}
@@ -790,7 +791,7 @@ void Client::CheatDetected(CheatTypes CheatType, float x, float y, float z)
 			char hString[250];
 			sprintf(hString, "/MQGate style hack, zone: %s:%d, loc: %.2f, %.2f, %.2f", database.GetZoneName(GetZoneID()), GetZoneID(), GetX(), GetY(), GetZ());
 			database.SetMQDetectionFlag(this->account_name, this->name, hString, zone->GetShortName());
-			this->SetZone(this->GetZoneID()); //Prevent the player from zoning, place him back in the zone where he tried to originally /gate.
+			this->SetZone(this->GetZoneID(), zone ? zone->GetGuildID() : GUILD_NONE); //Prevent the player from zoning, place him back in the zone where he tried to originally /gate.
 		}
 		break;
 	case MQGhost: //Not currently implemented, but the framework is in place - just needs detection scenarios identified
@@ -1157,7 +1158,7 @@ void Client::Handle_Connect_OP_ZoneEntry(const EQApplicationPacket *app)
 	database.LoadCharacterSpellBook(cid, &m_pp); /* Load Character Spell Book */
 	database.LoadCharacterMemmedSpells(cid, &m_pp);  /* Load Character Memorized Spells */
 	database.LoadCharacterLanguages(cid, &m_pp); /* Load Character Languages */
-
+	database.LoadCharacterLootLockouts(loot_lockouts, cid); /* Load CharacterTribute */
 	bool deletenorent = database.NoRentExpired(GetName());
 	if (loaditems && deletenorent) {
 		// client was offline for more than 30 minutes, delete no rent items
@@ -1244,6 +1245,7 @@ void Client::Handle_Connect_OP_ZoneEntry(const EQApplicationPacket *app)
 	conn_state = PlayerProfileLoaded;
 
 	m_pp.zone_id = zone->GetZoneID();
+	m_epp.zone_guild_id = zone->GetGuildID();
 	ignore_zone_count = false;
 	
 	
@@ -1517,7 +1519,7 @@ void Client::Handle_Connect_OP_ZoneEntry(const EQApplicationPacket *app)
 		{
 			m_pp.buffs[i].spellid = buffs[i].spellid;
 			m_pp.buffs[i].bard_modifier = buffs[i].instrumentmod;
-			m_pp.buffs[i].bufftype = 2; // TODO - don't hardcode this, it can be 4 for reversed effects
+			m_pp.buffs[i].bufftype = buffs[i].bufftype ? buffs[i].bufftype : 2;
 			m_pp.buffs[i].player_id = buffs[i].casterid;
 			m_pp.buffs[i].level = buffs[i].casterlevel;
 			m_pp.buffs[i].activated = spells[buffs[i].spellid].Activated;
@@ -2836,7 +2838,7 @@ void Client::Handle_OP_ClickDoor(const EQApplicationPacket *app)
 	char buf[20];
 	snprintf(buf, 19, "%u", cd->doorid);
 	buf[19] = '\0';
-	std::vector<EQ::Any> args;
+	std::vector<std::any> args;
 	args.push_back(currentdoor);
 	parse->EventPlayer(EVENT_CLICK_DOOR, this, buf, 0, &args);
 
@@ -2900,7 +2902,7 @@ void Client::Handle_OP_ClickObject(const EQApplicationPacket *app)
 
 		object->HandleClick(this, click_object);
 
-		std::vector<EQ::Any> args;
+		std::vector<std::any> args;
 		args.push_back(object);
 
 		char buf[10];
@@ -3045,7 +3047,7 @@ void Client::Handle_OP_ClientUpdate(const EQApplicationPacket *app)
 	m_EQPosition = glm::vec4(ppu->x_pos, ppu->y_pos, (float)ppu->z_pos/10.0f, ppu->heading);
 
 	if (GetZoneID() == airplane && m_EQPosition.z < -1200.0f) {
-		MovePC(freporte, -1570.0f, -25.0f, 20.0f, 231.0f);
+		MovePCGuildID(freporte, GUILD_NONE, -1570.0f, -25.0f, 20.0f, 231.0f);
 		return;
 	}
 
@@ -3138,10 +3140,7 @@ void Client::Handle_OP_ClientUpdate(const EQApplicationPacket *app)
 		Mob* boat = entity_list.GetMob(BoatID);	// find the mob corresponding to the boat id
 		if (boat) //These lil boats run fast!!
 		{
-			if (DistanceNoZ(boat->GetPosition(), newPosition) < distFromBoatThreshold)
-			{
-				has_boat = true;
-			}
+			has_boat = true;
 		}
 
 		if (distDivTime >= distDivTimeThreshold && !is_exempt_correct && !GetGM() && !dead && client_state == CLIENT_CONNECTED && !has_boat)
@@ -3688,12 +3687,29 @@ void Client::Handle_OP_CorpseDrag(const EQApplicationPacket *app)
 	Message_StringID(MT_DefaultText, CORPSEDRAG_BEGIN, cds->CorpseName);
 }
 
-void Client::Handle_OP_CreateObject(const EQApplicationPacket *app) 
+void Client::Handle_OP_CreateObject(const EQApplicationPacket *app)
 {
 	if (Admin() > 0)
 	{
-		std::string msg = "You cannot drop items as a GM. The emulator has had enough issues with that.";
-		Message(CC_Red, msg.c_str());
+		EQ::ItemInstance *inst = m_inv.GetItem(EQ::invslot::slotCursor);
+		if (inst)
+		{
+			std::string msg = "You cannot drop items as a GM. The emulator has had enough issues with that.";
+			Message(CC_Red, msg.c_str());
+			SendItemPacket(EQ::invslot::slotCursor, inst, ItemPacketSummonItem);
+		}
+		return;
+	}
+
+	if (zone && zone->GetGuildID() != GUILD_NONE)
+	{
+		EQ::ItemInstance *inst = m_inv.GetItem(EQ::invslot::slotCursor);
+		if (inst)
+		{
+			std::string msg = "You cannot drop items on the ground in guild instances.";
+			Message(CC_Red, msg.c_str());
+			SendItemPacket(EQ::invslot::slotCursor, inst, ItemPacketSummonItem);
+		}
 		return;
 	}
 
@@ -4450,7 +4466,7 @@ void Client::Handle_OP_GMGoto(const EQApplicationPacket *app)
 
 	Mob* gt = entity_list.GetMob(gmg->charname);
 	if (gt != nullptr) {
-		this->MovePC(zone->GetZoneID(), gt->GetX(), gt->GetY(), gt->GetZ(), gt->GetHeading());
+		this->MovePCGuildID(zone->GetZoneID(), zone->GetGuildID(), gt->GetX(), gt->GetY(), gt->GetZ(), gt->GetHeading());
 	}
 	else if (!worldserver.Connected())
 		Message(CC_Default, "Error: World server disconnected.");
@@ -4461,6 +4477,7 @@ void Client::Handle_OP_GMGoto(const EQApplicationPacket *app)
 		strcpy(wsgmg->myname, this->GetName());
 		strcpy(wsgmg->gotoname, gmg->charname);
 		wsgmg->admin = admin;
+		wsgmg->guildinstanceid = zone->GetGuildID();
 		worldserver.SendPacket(pack);
 		safe_delete(pack);
 	}
@@ -4864,7 +4881,7 @@ void Client::Handle_OP_GMZoneRequest2(const EQApplicationPacket *app)
 	}
 
 	uint32 zonereq = *((uint32 *)app->pBuffer);
-	GoToSafeCoords(zonereq);
+	GoToSafeCoords(zonereq, GUILD_NONE);
 
 	char szArg[5];
 	sprintf(szArg, "%i", zonereq);
@@ -5218,6 +5235,7 @@ void Client::Handle_OP_GroupFollow(const EQApplicationPacket *app)
 		ServerGroupJoin_Struct* gj = (ServerGroupJoin_Struct*)pack->pBuffer;
 		gj->gid = group->GetID();
 		gj->zoneid = zone->GetZoneID();
+		gj->zoneguildid = zone->GetGuildID();
 		strcpy(gj->member_name, GetName());
 		worldserver.SendPacket(pack);
 		safe_delete(pack);
@@ -7435,7 +7453,7 @@ void Client::Handle_OP_RezzAnswer(const EQApplicationPacket *app)
 		PendingRezzXP, ra->action ? "ACCEPT" : "DECLINE");
 
 
-	OPRezzAnswer(ra->action, ra->spellid, ra->zone_id, ra->x, ra->y, ra->z);
+	OPRezzAnswer(ra->action, ra->spellid, ra->zone_id, 0, ra->x, ra->y, ra->z);
 
 	if (ra->action == 1)
 	{
@@ -7570,7 +7588,7 @@ void Client::Handle_OP_SenseTraps(const EQApplicationPacket *app)
 				angle = (256 + angle);
 
 			angle *= 2;
-			MovePC(zone->GetZoneID(), GetX(), GetY(), GetZ(), angle);
+			MovePCGuildID(zone->GetZoneID(), zone->GetGuildID(), GetX(), GetY(), GetZ(), angle);
 			success = SKILLUP_SUCCESS;
 		}
 	}
@@ -7890,6 +7908,14 @@ void Client::Handle_OP_ShopPlayerBuy(const EQApplicationPacket *app)
 		return;
 	}
 
+	if (zone && zone->GetGuildID() != GUILD_NONE)
+	{
+		Message(CC_Red, "You cannot use merchants in guild instances.");
+		QueuePacket(returnapp);
+		safe_delete(returnapp);
+		return;
+	}
+
 	if (Admin() > 0 && tmpmer_used)
 	{
 		Message(CC_Red, "That item isn't normally sold here. You are a GM. You'd be griefing players. The gods weep today.");
@@ -8117,6 +8143,22 @@ void Client::Handle_OP_ShopPlayerSell(const EQApplicationPacket *app)
 	if (Admin() > 0)
 	{
 		Message(CC_Red, "Just use commands. You're literally a GM, silly goose.");
+		auto outapp = new EQApplicationPacket(OP_ShopPlayerSell, sizeof(OldMerchant_Purchase_Struct));
+		OldMerchant_Purchase_Struct* mco = (OldMerchant_Purchase_Struct*)outapp->pBuffer;
+
+		mco->itemslot = 0;
+		mco->npcid = vendor->GetID();
+		mco->quantity = 0;
+		mco->price = 0;
+		mco->playerid = this->GetID();
+		QueuePacket(outapp);
+		safe_delete(outapp);
+		return;
+	}
+
+	if (zone && zone->GetGuildID() != GUILD_NONE)
+	{
+		Message(CC_Red, "You cannot use merchants within guild instances.");
 		auto outapp = new EQApplicationPacket(OP_ShopPlayerSell, sizeof(OldMerchant_Purchase_Struct));
 		OldMerchant_Purchase_Struct* mco = (OldMerchant_Purchase_Struct*)outapp->pBuffer;
 
@@ -9460,7 +9502,7 @@ void Client::Handle_OP_Translocate(const EQApplicationPacket *app)
 
 			////Was sending the packet back to initiate client zone...
 			////but that could be abusable, so lets go through proper channels
-			MovePC(PendingTranslocateData.zone_id,
+			MovePCGuildID(PendingTranslocateData.zone_id, GUILD_NONE,
 				PendingTranslocateData.x, PendingTranslocateData.y,
 				PendingTranslocateData.z, PendingTranslocateData.heading, 0, ZoneSolicited);
 		}
@@ -9832,4 +9874,17 @@ void Client::Handle_OP_TradeRefused(const EQApplicationPacket *app)
 	}
 
 	return;
+}
+
+void Client::Handle_OP_SpellTextMessage(const EQApplicationPacket *app)
+{
+	// this message is sent in two places in the client
+	// 1. lifetap spells 'groaning'
+	// 2. spell cast interrupt from stunning warrior kick
+
+	// this is the layout but no need to do any processing on this, we just forward it on
+	//int16 entity_id = *(int16 *)app->pBuffer;
+	//char *spell_emote_msg = (char *)(app->pBuffer + 2);
+
+	entity_list.QueueCloseClients(this, app, true, 200.0);
 }

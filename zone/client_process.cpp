@@ -145,6 +145,7 @@ bool Client::Process() {
 		if(dead && dead_timer.Check()) 
 		{
 			m_pp.zone_id = m_pp.binds[0].zoneId;
+			m_epp.zone_guild_id = GUILD_NONE;
 			database.MoveCharacterToZone(GetName(), database.GetZoneName(m_pp.zone_id));
 
 			glm::vec4 bindpts(m_pp.binds[0].x, m_pp.binds[0].y, m_pp.binds[0].z, m_pp.binds[0].heading);
@@ -623,6 +624,12 @@ bool Client::Process() {
 		}
 
 		client_state = CLIENT_LINKDEAD;
+
+		if (IsSitting())
+		{
+			Stand();
+		}
+
 		if (zoning || instalog || GetGM())
 		{
 			Group *mygroup = GetGroup();
@@ -1168,9 +1175,9 @@ void Client::MerchantWelcome(int merchant_id, int npcid)
 	}
 }
 
-void Client::OPRezzAnswer(uint32 Action, uint32 SpellID, uint16 ZoneID, float x, float y, float z)
+void Client::OPRezzAnswer(uint32 Action, uint32 SpellID, uint16 ZoneID, uint32 GuildZoneID, float x, float y, float z)
 {
-	if(PendingRezzXP < 0) {
+	if(PendingRezzXP < 0 || PendingRezzZoneID == 0) {
 		// pendingrezexp is set to -1 if we are not expecting an OP_RezzAnswer
 		Log(Logs::Detail, Logs::Spells, "Unexpected OP_RezzAnswer. Ignoring it.");
 		Message(CC_Red, "You have already been resurrected.\n");
@@ -1212,8 +1219,11 @@ void Client::OPRezzAnswer(uint32 Action, uint32 SpellID, uint16 ZoneID, float x,
 
 		//Was sending the packet back to initiate client zone...
 		//but that could be abusable, so lets go through proper channels
-		MovePC(ZoneID, x, y, z, GetHeading() * 2.0f, 0, ZoneSolicited);
+		if(PendingRezzZoneID != 0 && PendingRezzZoneGuildID != 0)
+			MovePCGuildID(PendingRezzZoneID, PendingRezzZoneGuildID, x, y, z, GetHeading() * 2.0f, 0, ZoneSolicited);
 	}
+	PendingRezzZoneID = 0;
+	PendingRezzZoneGuildID = 0;
 	PendingRezzXP = -1;
 	PendingRezzSpellID = 0;
 }
@@ -1805,9 +1815,11 @@ void Client::OPGMTrainSkill(const EQApplicationPacket *app)
 			}
 			// solar: the client code uses the level required as the initial skill level of a newly acquired skill.  it is believed
 			// that the initial level of a skill should be the player's current level instead, but this puts the client window out
-			// of sync with the real value.  currently we are following the client logic so it stays in sync.
-			// TODO: this is a workaround for not being able to differentiate between a value 0 skill and an untrained (254) skill
-			t_level = t_level == 1 ? 1 : std::min((uint16)GetLevel(), MaxSkill(skill));
+			// of sync with the real value.
+			{
+				// TODO: this check for level 1 is a workaround for not being able to differentiate between a value 0 skill and an untrained (254) skill
+				t_level = t_level == 1 ? 1 : std::min((uint16)GetLevel(), MaxSkill(skill));
+			}
 			SetSkill(skill, t_level, true);
 		} else {
 			switch(skill) {
