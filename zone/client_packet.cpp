@@ -715,6 +715,12 @@ void Client::CompleteConnect()
 		ClearPlayerInfoAndGrantStartingItems();
 		ForceGoToDeath();
 	}
+
+	// Evac player to zonein during PVP quakes if they log in on first login in this zone.
+	//if (firstlogon && zone && zone->GetGuildID() == GUILD_NONE && zone->last_quake_struct.quake_type != QuakeType::QuakeDisabled && zone->last_quake_struct.start_timestamp > 0 && prev_last_login_time > 0 && prev_last_login_time < zone->last_quake_struct.start_timestamp)
+	//{
+	//	MovePCGuildID(zone->GetZoneID(), GUILD_NONE, 0, 0, 0, 0, 0, EvacToSafeCoords);
+	//}
 }
 
 
@@ -893,8 +899,16 @@ void Client::Handle_Connect_OP_SendExpZonein(const EQApplicationPacket *app)
 	safe_delete_array(out_app.pBuffer);
 
 	SetSpawned();
+
+	if (GetPVP() == 2 && zone && zone->last_quake_struct.quake_type != QuakeType::QuakePVP)
+		SetPVP(0);
+
+	if (GetPVP() == 0 && zone && zone->last_quake_struct.quake_type == QuakeType::QuakePVP)
+		SetPVP(2);
+
 	if (GetPVP())	//force a PVP update until we fix the spawn struct
-		SendAppearancePacket(AT_PVP, GetPVP(), true, false);
+		SendAppearancePacket(AT_PVP, (bool)GetPVP(), true, false);
+
 
 	//Send AA Exp packet:
 	if (GetLevel() >= 51)
@@ -3137,11 +3151,8 @@ void Client::Handle_OP_ClientUpdate(const EQApplicationPacket *app)
 
 		bool has_boat = false;
 
-		Mob* boat = entity_list.GetMob(BoatID);	// find the mob corresponding to the boat id
-		if (boat) //These lil boats run fast!!
-		{
+		if (BoatID || m_pp.boat[0])
 			has_boat = true;
-		}
 
 		if (distDivTime >= distDivTimeThreshold && !is_exempt_correct && !GetGM() && !dead && client_state == CLIENT_CONNECTED && !has_boat)
 		{
@@ -3382,7 +3393,7 @@ void Client::Handle_OP_Consider(const EQApplicationPacket *app)
 	con->level = GetLevelCon(tmob->GetLevel());
 	if (zone->IsPVPZone()) {
 		if (!tmob->IsNPC())
-			con->pvpcon = tmob->CastToClient()->GetPVP();
+			con->pvpcon = (bool)tmob->CastToClient()->GetPVP();
 	}
 
 	// If we're feigned show NPC as indifferent
